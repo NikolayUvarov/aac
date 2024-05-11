@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="post" >
+
+  {% include 'fragment_branch.j2' %}
+
+  {% set funcSetRequired = True %}
+  {% include 'fragment_funcset.j2' %}
+
+  <label>
+    <span>Readable funcset name:</span>
+    <br/>
+    <input type="text" name="readablename"/>
+  </label>
+  <br/>
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

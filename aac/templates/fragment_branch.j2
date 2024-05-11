@@ -1,0 +1,21 @@
+  <section>
+    
+     {% if not label4Branch %}
+       {% set label4Branch = 'Branch' %}
+     {% endif %}
+    
+
+    <label for="branch">{{label4Branch}}:</label>
+    <br/>
+    <input type="text" id="branch" name="branch" list="branches" 
+           {{ '' if branchCanBeEmpty else 'required=""' }}
+           {{ 'value="'+branchInit+'"' if branchInit else '' }}
+           {{ 'onchange="this.form.submit()"' if branchAutoSubmit else '' }}
+    />
+    <datalist id="branches">
+      {% for branchId in branchList %}
+        <option value="{{ branchId|e }}">{{ branchId }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

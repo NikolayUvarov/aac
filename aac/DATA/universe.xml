@@ -1,0 +1,274 @@
+﻿<universe>
+  <!-- ############################################################################################################################### -->
+  <branches>
+    <branch id="top level administration">
+      <deffuncsets>
+        <funcset id="agentFuncs" name="Agents handling">
+          <!-- понятийная сущность - произвольная группировка функций -->
+          <func id="agadm:createAgent"/>
+          <func id="agadm:deleteAgent"/>
+        </funcset>
+        <funcset id="employementFuncs" name="Employement">
+          <func id="eadm:employeeHire"/>
+          <func id="eadm:employeeFire"/>
+        </funcset>
+        <funcset id="fullUserFuncs" name="Full user management">
+          <func id="uadm:createUser"/>
+          <func id="uadm:deleteUser"/>
+        </funcset>
+        <funcset id="limUserFuncs" name="Limited user management">
+          <func id="uadm:createUser"/>
+        </funcset>
+        <funcset id="Tests" name="Tests">
+          <func id="test:states"/>
+        </funcset>
+      </deffuncsets>
+      <func_white_list>
+        <!-- no need to whitelist funcsets defined in the current branch - they are whitelisted automatically -->
+      </func_white_list>
+      <employees>
+        <employee pos="top-admin-great-magister" person="Ivanov" head="yes"/>
+        <employee pos="top-admin-assistant" person="NewOne"/>
+        <employee pos="top-admin-assistant" person="Kots"/>
+      </employees>
+      <!-- Specifying some generic roles. Any role can be redefined in nested branch, or new roles defined. Names may be not unique. -->
+      <roles>
+        <role name="CEO">
+          <!-- this branch has own interpretation of CEO role with own funcsets permitted -->
+          <funcset id="Tests"/>
+          <funcset id="limUserFuncs"/>
+          <funcset id="employementFuncs"/>
+        </role>
+        <role name="HR">
+          <funcset id="Tests"/>
+          <funcset id="limUserFuncs"/>
+        </role>
+        <role name="atm-support">
+          <funcset id="Tests"/>
+          <funcset id="agentFuncs"/>
+        </role>
+        <role name="top-admin-assistant">
+          <funcset id="Tests"/>
+          <funcset id="fullUserFuncs"/>
+          <funcset id="branchFuncs"/>
+          <funcset id="employementFuncs"/>
+          <funcset id="agentFuncs"/>
+        </role>
+        <role name="top-admin-great-magister">
+          <funcset id="Tests"/>
+          <funcset id="fullUserFuncs"/>
+          <funcset id="superFuncs"/>
+          <funcset id="branchFuncs"/>
+          <funcset id="employementFuncs"/>
+          <funcset id="agentFuncs"/>
+        </role>
+      </roles>
+      <!-- All the branches below are nested to the root branch -->
+      <branches>
+        <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+        <!-- sub-root for the reporting system -->
+        <branch id="report-branch">
+          <deffuncsets>
+            <funcset id="report_common_funcs" name="Report Common Functions">
+              <func id="report:data-sources-list"/>
+            </funcset>
+            <funcset id="report_views-def" name="Default Report Views">
+              <func id="report:def:apiview"/>
+              <func id="report:def:mapview"/>
+              <func id="report:def:overview"/>
+              <func id="report:def:overview-summ"/>
+              <func id="report:def:overview-summ-long"/>
+            </funcset>
+            <funcset id="report_views-client1" name="Report Views for Client 1">
+              <func id="report:cl1:apiview"/>
+              <func id="report:cl1:mapview"/>
+              <func id="report:cl1:overview"/>
+              <func id="report:cl1:overview-summ"/>
+              <func id="report:cl1:overview-summ-long"/>
+            </funcset>
+          </deffuncsets>
+          <func_white_list>
+            <funcset id="fullUserFuncs"/>
+            <funcset id="employementFuncs"/>
+          </func_white_list>
+          <roles>
+            <role name="report-admin">
+              <funcset id="employementFuncs"/>
+              <funcset id="fullUserFuncs"/>
+              <funcset id="report_common_funcs"/>
+            </role>
+            <role name="report-user">
+              <funcset id="report_common_funcs"/>
+              <funcset id="report_views-def"/>
+              <funcset id="report_views-client1"/>
+              <!-- listing here all, in the branches will cut the unneeded by whitelists -->
+            </role>
+          </roles>
+          <employees>
+            <employee pos="report-admin" head="yes" person="report-admin"/>
+          </employees>
+          <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+          <!-- Sub-branches for report system -->
+          <branches>
+            <branch id="report-branch-DEF">
+              <func_white_list>
+                <funcset id="report_common_funcs"/>
+                <funcset id="report_views-def"/>
+              </func_white_list>
+              <employees>
+                <employee pos="report-user"/>
+              </employees>
+              <deffuncsets/>
+              <roles/>
+            </branch>
+            <branch id="report-branch-client1">
+              <func_white_list>
+                <funcset id="report_common_funcs"/>
+                <funcset id="report_views-client1"/>
+              </func_white_list>
+              <employees>
+                <employee pos="report-user"/>
+                <employee pos="report-admin" person="Nikonov"/>
+              </employees>
+              <deffuncsets/>
+              <roles/>
+            </branch>
+          </branches>
+        </branch>
+        <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+        <branch id="Bank1">
+          <func_white_list propagateParent="no">
+            <!-- no automatic propagation of parent whitelist, content will be specified one by one -->
+            <!-- propagation of level 0 root whitelist should not be treated as a good practice - some functions are natively admins only  -->
+            <funcset id="agentFuncs"/>
+            <funcset id="limUserFuncs"/>
+            <funcset id="employementFuncs"/>
+          </func_white_list>
+          <employees>
+            <employee pos="CEO" head="yes"/>
+            <employee pos="HR" person="Targarien"/>
+            <employee pos="HR" person="Qwert"/>
+            <employee pos="HR"/>
+            <employee pos="atm-support" person="Jack"/>
+            <employee pos="atm-support" person="MiniMe"/>
+            <employee pos="atm-support" person="Test"/>
+          </employees>
+          <roles>
+            <!-- specifying here some roles specific for this branch. Names may be not unique. -->
+            <role name="CEO">
+              <!-- this branch has own interpretation of CEO role with own funcsets permitted -->
+              <funcset id="bank1ceoFuncs"/>
+              <funcset id="employementFuncs"/>
+            </role>
+            <role name="HR">
+              <funcset id="limUserFuncs"/>
+            </role>
+            <role name="office_head">
+              <funcset id="agentFuncs"/>
+            </role>
+          </roles>
+          <deffuncsets>
+            <funcset id="bank1ceoFuncs" name="Bank1 CEO functions">
+              <!-- Defining here a local funcset. Name is globally unique however because we have to publish it in authorize report -->
+              <func id="createUser"/>
+              <func id="employeeHire"/>
+              <func id="employeeFire"/>
+            </funcset>
+          </deffuncsets>
+          <branches>
+            <branch id="Bank1|Office1">
+              <employees>
+                <employee pos="office_head" person="Sidorov" head="yes"/>
+                <employee pos="atm-support" person="John Snow"/>
+                <employee pos="atm-support" person="Ivan"/>
+                <employee pos="atm-support" person="Kotov"/>
+              </employees>
+              <func_white_list propagateParent="yes"/>
+            </branch>
+          </branches>
+        </branch>
+        <branch id="Bank2">
+          <employees>
+            <employee pos="CEO" head="yes" person="Petrov"/>
+          </employees>
+          <func_white_list propagateParent="no">
+            <funcset id="agentFuncs"/>
+            <funcset id="employementFuncs"/>
+            <funcset id="limUserFuncs"/>
+            <funcset id="report_common_funcs"/>
+          </func_white_list>
+          <deffuncsets/>
+          <roles/>
+          <defproperties>
+            <property name="TestProp">
+              <variant>Val2</variant>
+              <variant>Val1</variant>
+              <variant>Val3</variant>
+            </property>
+          </defproperties>
+        </branch>
+        <branch id="IndentTest1">
+          <func_white_list propagateParent="no"/>
+          <employees/>
+          <roles/>
+          <deffuncsets/>
+          <branches>
+            <branch id="IndentTest2">
+              <func_white_list propagateParent="no"/>
+              <employees/>
+              <roles/>
+              <deffuncsets/>
+              <branches/>
+            </branch>
+          </branches>
+        </branch>
+      </branches>
+      <defproperties>
+        <property name="Happy">
+          <variant>No</variant>
+          <variant>Yes</variant>
+        </property>
+      </defproperties>
+    </branch>
+  </branches>
+  <!-- ############################################################################################################################### -->
+  <registers>
+    <!-- ############################################################################################################################### -->
+    <people_register>
+      <!-- keeping persons in a separate catalogue to separate theis secrets from orgaizational structure. A sort of DB normalization. -->
+      <!--secret is sha256 for now-->
+      <person id="Ivanov" secret="b6f5d8f4094923899760aeb1e2a06bef49922e6e1767a7ca0c9063324c9a05a6" failures="0" pswChangedAt="1676053730" last_auth_success="1684624780" last_error="1676322691" expireAt="1707589730"/>
+      <person id="Petrov" secret="c18b0fd384e1df921f75ec456718423b31d63ad5133a2ec14a3590ff9d49278b" failures="0" pswChangedAt="1661849127" last_error="1661881859" last_auth_success="1678173950"/>
+      <person id="Sidorov" secret="4c28a43d9a9c1802dcc1b54746f042f86c5de2e98ebf26f134e4b5a142ffaf12" failures="0" pswChangedAt="1661849156" last_error="1667561734" last_auth_success="1676411865"/>
+      <person id="Jack" secret="b363d9ff4d75b36875a45369f99a64e2b95901979fc617a73f0d619dfcebf3fa" failures="0" pswChangedAt="1661849211"/>
+      <person id="Ncr" secret="53a1e06788d225c05e2b6a2cfee89dbcee900e1df19a592dc75cd8c25c56fa58" failures="0" pswChangedAt="1661849230"/>
+      <person id="John Snow" secret="5372d9e09fc73f7b93ac02b4bbaa050f087b60f0de9d5f012b6700a75cc9a020" failures="0" pswChangedAt="1661849260"/>
+      <person id="Targarien" secret="4ca9a23f1a81d6d31c6d434e9a62ac445bd87a1c4ae1ad7f496fd977954db955" failures="3" pswChangedAt="1661955906" last_auth_success="1661955921" expireAt="1693491906" last_error="1676132971"/>
+      <person id="Lebovski" secret="5481571f15561de4aefb06b45863ee97488b8a2bbd085f9e6f67a8a448f2717a" failures="0" pswChangedAt="1661849313" last_auth_success="1668290517"/>
+      <person id="NewOne" secret="54a8091b4aa7cf4f6f42aed3adbdf9b47f724d1f5bf00b390f67bbc89f0c9e3d" failures="0" pswChangedAt="1661849336"/>
+      <person id="MiniMe" secret="3821297e97ee1ed020bf671d78ab669efb9239a7f8f108b487fa07bfb26ada8e" failures="0" pswChangedAt="1661849349"/>
+      <person id="Johnson" secret="a3f9caa290c916b021cf640817c3791c50c80b92ab1bb99a3f1d0fd71ea68852" failures="0" pswChangedAt="1668290623" expireAt="1699826623" last_auth_success="1668290638"/>
+      <person id="Ivan" secret="04b823c6148854d37bfb8a9546b74cfb207e8e55dc62b46034f1fd85ef0cdff4" pswChangedAt="1663756431" failures="0" last_auth_success="1663521947" expireAt="1695292431"/>
+      <person id="Test" secret="fcd972b47018ed07ef0e700aa25ba7195dd57f306dc302e2d1ba6aabbbc415f2" pswChangedAt="1665249689" failures="0" expireAt="1680801689"/>
+      <person id="admin" secret="c4a3bea5d95492c49eb60f858ccb9cc0284ff4bea008013c6f07e2e61a95b315" pswChangedAt="1667469052" failures="0" expireAt="1683021052"/>
+      <person id="admin22" secret="f719c2ed8f1d9edcbc840094fa8d7282c83fc233cb66fc59ef96bd1875f3e468" pswChangedAt="1680724483" failures="0" readableName="Ulovka 22" sessionMax="60" expireAt="1712260483">
+        <changed by="Ivanov" at="1680724483"/>
+      </person>
+      <person id="report-admin" secret="25def6da3f9de1b878900dbf6cb044154992311e0bf0cbe0efe18ab7bcd98200" pswChangedAt="1667485686" failures="0" last_error="1667625517" last_auth_success="1667660442"/>
+      <person id="Qwert" secret="24dafc54ae60f8e62b4dbb7e7f6e021205692ae59123a7c1a8e10d9603750788" pswChangedAt="1669241413" failures="0" expireAt="1700777413" last_error="1669241400" last_auth_success="1676132993"/>
+      <person id="Qwer5" secret="295502867b71344058d9d8afac33ce6ba47ddf058e20e09cec821e1c3d3a55fa" pswChangedAt="1668118344" failures="0"/>
+      <person id="Wert" secret="0f6f756a6fc7f492d71154c7a67992174d2b168b87c24a2e902e51b93a8d5e57" pswChangedAt="1669241472" failures="0" expireAt="1700777472" last_auth_success="1669241485"/>
+      <person id="Nikonov" secret="f1659a734694456579568c10c470200906e681794078e0e45efd0e85b9dc35d3" pswChangedAt="1669241517" failures="0" expireAt="1700777517"/>
+      <person id="BlaBlaCar" secret="535a3699fc6dccb0ee7ae65095dd9f1dd4090a011332e7cb5a3273f63a97ee9d" pswChangedAt="1674163661" failures="0" expireAt="1689715661"/>
+      <person id="Kotov" secret="53fd05622bc49c2dd34f9b1649929113450f3bfcff0c501c7a297936f1a42ade" pswChangedAt="1676132585" failures="0" expireAt="1707668585"/>
+      <person id="Kots" secret="3950711fbb7094cd42a5a5e8aae774ab3f0858f3ccd7deb3280dab076540da92" pswChangedAt="1676479092" failures="0" readableName="Sergey V. Kotov" sessionMax="33" createdBy="Ivanov" createdAt="1676470744" expireAt="1708015092" last_auth_success="1691148479">
+        <changed by="Petrov" at="1676473893"/>
+        <changed by="Petrov" at="1676473903"/>
+        <changed by="Ivanov" at="1676479092"/>
+      </person>
+      <person id="Kobrin" secret="1827fc86524cc2e784414d7144f28d57abd37f5b55a668cabe9fde37f15ad07e" pswChangedAt="1678196264" failures="0" readableName="Alexander Kobrin" sessionMax="120" createdBy="Kots" createdAt="1678196264" expireAt="1693748264" last_auth_success="1678196325"/>
+    </people_register>
+    <!-- ############################################################################################################################### -->
+  </registers>
+  <!-- ############################################################################################################################### -->
+</universe>

@@ -1,0 +1,10 @@
+  {% if not nEntries %}
+    {% set nEntries = 5 %}
+  {% endif %}
+
+  <section>
+    {% for i in range(nEntries) %}
+        <input type="text" name="{{entryName}}"/> <br/>
+    {% endfor %}
+    <br/>
+  </section>

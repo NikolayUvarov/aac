@@ -1,0 +1,12 @@
+aac/.venv
+aac/.venv/*
+
+*.py[cod]
+*.pyc
+
+*.log
+*.log.*
+
+aac/DATA/*.xml.temp.xml
+aac/DATA/*.xml.bk.xml
+

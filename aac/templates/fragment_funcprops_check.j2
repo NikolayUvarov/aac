@@ -1,0 +1,23 @@
+  <section>
+
+    <script>
+      propset = new Set()
+
+      //function change(obj,val) { if(obj.checked) propset.add(val); else propset.delete(val); } // less funny
+      function change(obj,val) { propset[obj.checked?"add":"delete"](val); }                     // more funny :)
+
+      function submit_props() { document.getElementById('props').value = Array.from(propset).join(','); }
+    </script>
+  
+    <p>Please select function properties to report:</p>
+    <label><input type="checkbox" onclick="change(this,'id')"/> Function unique id </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'name')"/> Function readable short name </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'title')"/> Function title </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'description')"/> Function description </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'callpath')"/> Request path </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'method')"/> Request method </label> <br/>
+    <label><input type="checkbox" onclick="change(this,'contenttype')"/> Request body content type </label> <br/>
+  
+    <input type="hidden" id="props" name="props"/>
+
+  </section>

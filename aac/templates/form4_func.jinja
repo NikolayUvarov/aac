@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% include 'fragment_funcid.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

@@ -1,0 +1,14 @@
+  <section>
+    <label for="username">User ID:</label>
+    <br/>
+    <input type="text" id="username" name="username" required="" list="users"
+        {{ 'onchange="this.form.submit()"' if userAutoSubmit else '' }}
+        {{ 'value="'+useridInit+'"' if useridInit else '' }}
+    />
+    <datalist id="users">
+      {% for userId in userList %}
+        <option value="{{ userId|e }}">{{ userId|e }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

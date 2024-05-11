@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% include 'fragment_userid.j2' %}
+
+  {% if operatorDriven %}
+      {% include 'fragment_operator.j2' %}
+  {% endif %}
+  
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

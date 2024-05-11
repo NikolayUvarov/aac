@@ -1,0 +1,113 @@
+﻿<catalogues>
+  <!-- ############################################################################################################################### -->
+  <functions_catalogue>
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+    <function id="uadm:createUser" name="Create user" title="Create user" descr="This function creates a new user">
+      <!--===-->
+      <in>
+        <str entry="USERNAME" check="^.+$" title="New user ID" descr="ID for a new user (in any alphabet)"/>
+        <str entry="READABLE" check="^.+$" title="Readable user name" descr="Readable user name" optional="yes" />
+        <password entry="PSW" check="^.+$" title="Password for new user" descr="Non empty password made from any characters"/>
+        <!-- the following data item is not enterable but buildable from others: -->
+        <sha256 new="SECRET">
+          <concat>
+            <insert from="PSW"/>
+            <insert from="USERNAME"/>
+          </concat>
+        </sha256>
+        <bool entry="EXPIREABLE" default="yes" title="Password can expire" descr="Can the password expire or will it live forever"/>
+        <duration entry="LIFETIME" if-yes="EXPIREABLE" optional="yes" default="180" title="Password life time (days)" descr="A non-negative number. Ignored if password can't expire."/>
+        <duration entry="SESSMAX" default="120" title="Session duration limit (minutes)" descr="A non-negative number." optional="yes"/>
+     </in>
+      <!--===-->
+      <call method="POST">
+        <url><origin of="AAC"/>/aac/user/create</url>
+        <body content-type="application/x-www-form-urlencoded">username=<insert from="USERNAME"/>&amp;secret=<insert from="SECRET"/><text if-yes="EXPIREABLE">&amp;pswlifetime=</text><insert from="LIFETIME" if-yes="EXPIREABLE"/>&amp;operator=<operator/>&amp;readablename=<insert from="READABLE"/>&amp;sessionmax=<insert from="SESSMAX"/></body>
+      </call>
+      <!--===-->
+      <out format="json">
+        <!-- jsonpath syntax for select if result format is json, xpath if xml, regexp if text. -->
+        <done if="$.result" eq="true" title="Operation done">
+          <timestamp id="CHANGED_TS" select="$.secret_changed" title="Password changed"/>
+          <timestamp id="EXPIRE_TS" select="$.secret_expiration" title="Password will expire"/>
+        </done>
+        <!-- We can have several "failed" processors, each one with own if/eq attributes. If one, conditions can be skept. -->
+        <failed title="Operation failed">
+          <str id="FAIL_REASON" select="$.reason" title="Failure reason"/>
+        </failed>
+      </out>
+      <!--===-->
+    </function>
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+    <function id="uadm:deleteUser" name="Delete user" title="Delete user" descr="Delete user">
+      <!--===-->
+      <in>
+        <str entry="USERNAME" check="^.+$" name="User name" title="Existing user name"/>
+      </in>
+      <!--===-->
+      <call method="POST">
+        <url><origin of="AAC"/>/aac/user/delete</url>
+        <body content-type="application/x-www-form-urlencoded">username=<insert from="USERNAME"/>&amp;operator=<operator/></body>
+      </call>
+      <!--===-->
+      <out format="json"><done if="$.result" eq="true" title="User deleted"/><!-- We can have several "failed" processors, each one with own if/eq attributes: --><failed if="$.reason" eq="USER-UNKNOWN" title="User doesn't exist"/>&gt;
+        <failed if="$.reason" eq="USER-EMPLOYED" title="User needs to be fired before killing him"/>&gt;
+        <failed><str id="FAIL_REASON" select="$.reason" title="Failure reason"/></failed>
+      </out>
+      <!--===-->
+    </function>
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+    <function id="test:states" name="States Test" title="States Test" descr="Simulation of a long running function with a few intermediate states" tags="test3,test2,test4,test1">
+      <!--===-->
+      <in>
+        <duration entry="EACHDUR" default="10" title="Each step duration (sec)" descr="Duration of each execution state"/>
+        <str entry="STATES" title="Steps comma separated" default="STATE1,STATE2,STATE3" descr="Comma separated list of STATE1, STATE2 and STATE3 in any order and repeatability"/>
+        <str entry="FINAL" title="Final message" default="Hello, world!" descr="Some text to transfer at the end"/>
+        <str entry="AGENT" title="Agent ID" default="---" descr="ID of agent for whom to execute function" iterable="yes"/>
+      </in>
+      <!--===-->
+      <call method="GET">
+        <url><origin of="AAC"/>/aac/testrunner/states?agent=<insert from="AGENT"/>&amp;durationEach=<insert from="EACHDUR"/>&amp;states=<insert from="STATES"/>&amp;final=<insert from="FINAL"/></url>
+      </call>
+      <!--===-->
+      <out format="json">
+        <execution-state if="$.state" eq="STATE1" nextcheckdelay="3" title="1-st state">
+          <str id="TASK_ID" select="$.task_id" title="Task ID"/>
+          <duration id="STATE_EXEC_TIME" select="$.state_exec_time" title="State executed (msec)"/>
+          <duration id="TOTAL_EXEC_TIME" select="$.total_exec_time" title="Total execution time (msec)"/>
+          <poll method="GET">
+            <url><origin of="AAC"/>/aac/testrunner/states?poll=<insert from="TASK_ID"/></url>
+          </poll>
+        </execution-state>
+        <execution-state if="$.state" eq="STATE2" nextcheckdelay="3" title="2-nd state">
+          <str id="TASK_ID" select="$.task_id" title="Task ID"/>
+          <duration id="STATE_EXEC_TIME" select="$.state_exec_time" title="State executed (msec)"/>
+          <duration id="TOTAL_EXEC_TIME" select="$.total_exec_time" title="Total execution time (msec)"/>
+          <poll method="GET">
+            <url><origin of="AAC"/>/aac/testrunner/states?poll=<insert from="TASK_ID"/></url>
+          </poll>
+        </execution-state>
+        <execution-state if="$.state" eq="STATE3" nextcheckdelay="3" title="3-rd state">
+          <str id="TASK_ID" select="$.task_id" title="Task ID"/>
+          <duration id="STATE_EXEC_TIME" select="$.state_exec_time" title="State executed (msec)"/>
+          <duration id="TOTAL_EXEC_TIME" select="$.total_exec_time" title="Total execution time (msec)"/>
+          <poll method="GET">
+            <url><origin of="AAC"/>/aac/testrunner/states?poll=<insert from="TASK_ID"/></url>
+          </poll>
+        </execution-state>
+        <done if="$.state" eq="done" title="Finished well">
+          <str id="AGENT" select="$.agent_id" title="At agent"/>
+          <str id="TASK_ID" select="$.task_id" title="Task ID"/>
+          <duration id="TOTAL_EXEC_TIME" select="$.total_exec_time" title="Total execution time (msec)"/>
+          <str id="FINMESS" select="$.final_message" title="Final Message"/>
+        </done>
+        <failed title="Some shit happened">
+          <str id="FAIL_REASON" select="$.reason" title="Failure reason"/>
+        </failed>
+      </out>
+      <!--===-->
+    </function>
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+  </functions_catalogue>
+  <!-- ############################################################################################################################### -->
+</catalogues>

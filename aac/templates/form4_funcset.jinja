@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% set funcSetRequired = True %}
+  {% include 'fragment_funcset.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

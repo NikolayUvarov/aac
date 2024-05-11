@@ -1,0 +1,11 @@
+  <section>
+    <label for="operator">Operator ID:</label>
+    <br/>
+    <input type="text" id="operator" name="operator" required="" list="operators"/>
+    <datalist id="operators">
+      {% for userId in operList %}
+        <option value="{{ userId|e }}">{{ userId|e }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

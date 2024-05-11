@@ -1,0 +1,35 @@
+﻿<universe>
+  <!-- ############################################################################################################################### -->
+  <branches>
+    <branch id="sysroot">
+      <deffuncsets>
+        <!-- space for funcsets -->
+      </deffuncsets>
+      <func_white_list>
+        <!-- no need to whitelist funcsets defined in the current branch - they are whitelisted automatically -->
+      </func_white_list>
+      <employees>
+        <employee pos="superuser" person="admin"/>
+      </employees>
+      <!-- Specifying some generic roles. Any role can be redefined in nested branch, or new roles defined. Names may be not unique. -->
+      <roles>
+        <role name="superuser"/>
+      </roles>
+      <!-- All the branches below are nested to the root branch -->
+      <branches>
+        <!-- space for branches -->
+      </branches>
+    </branch>
+  </branches>
+  <!-- ############################################################################################################################### -->
+  <registers>
+    <!-- ############################################################################################################################### -->
+    <people_register>
+      <!-- keeping persons in a separate catalogue to separate theis secrets from orgaizational structure. A sort of DB normalization. -->
+      <!--secret is sha256 for now-->
+       <person id="admin" secret="d82494f05d6917ba02f7aaa29689ccb444bb73f20380876cb05d1f37537b7892" pswChangedAt="0" failures="0" readableName="System super admin" sessionMax="120" />	
+    </people_register>
+    <!-- ############################################################################################################################### -->
+  </registers>
+  <!-- ############################################################################################################################### -->
+</universe>

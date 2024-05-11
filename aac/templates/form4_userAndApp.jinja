@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form>
+
+  {% include 'fragment_userid.j2' %}
+
+  <label for="app">Application:</label>
+  <br/>
+  <select id="app" name="app">
+    <option value="">(not specified)</option>
+    <option value="gAP">gAP</option>
+    <option value="thePage">thePage</option>
+  </select>
+  <br/>
+  
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

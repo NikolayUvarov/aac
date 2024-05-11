@@ -1,0 +1,15 @@
+  <section>
+    <label for="role">Role:</label>
+    <br/>
+    <input type="text" id="role" name="role" list="roles" 
+           {{ 'required=""' if roleRequired else '' }} 
+           {{ 'value="'+roleInit+'"' if roleInit else '' }}
+           {{ 'onchange="this.form.submit()"' if roleAutoSubmit else '' }}
+    />
+    <datalist id="roles">
+      {% for roleName in rolesList %}
+        <option value="{{ roleName|e }}"></option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

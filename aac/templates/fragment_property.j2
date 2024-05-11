@@ -1,0 +1,15 @@
+  <section>
+    <label for="prop">Property name:</label>
+    <br/>
+    <input type="text" id="prop" name="prop" list="props"
+           {{ 'required=""' if propRequired else '' }} 
+           {{ 'value="'+propInit+'"' if propInit else '' }}
+           {{ 'onchange="this.form.submit()"' if propAutoSubmit else '' }}
+    />
+    <datalist id="props">
+      {% for propName in propsList %}
+        <option value="{{ propName|e }}"></option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

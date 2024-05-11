@@ -1,0 +1,15 @@
+  <section>
+    <label for="funcset">Funcset:</label>
+    <br/>
+    <input type="text" id="funcset" name="funcset" list="funcSets" 
+           {{ 'required=""' if funcSetRequired else '' }} 
+           {{ 'value="'+funcSetInit+'"' if funcSetInit else '' }}
+           {{ 'onchange="this.form.submit()"' if funcsetAutoSubmit else '' }}
+    />
+    <datalist id="funcSets">
+      {% for fs in funcSets %}
+        <option value="{{ fs|e }}">{{ fs|e }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

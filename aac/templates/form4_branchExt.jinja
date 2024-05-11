@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% include 'fragment_branch.j2' %}
+
+  {% for cb in cboxes %}
+    <label><input type="checkbox" name="{{cb[0]}}" value="yes"
+                  {% if cb[2] %}
+                    checked=""
+                  {% endif %}
+           > {{cb[1]}} </label>
+    <br/>  
+  {% endfor %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

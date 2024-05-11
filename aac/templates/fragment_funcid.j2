@@ -1,0 +1,11 @@
+  <section>
+    <label for="funcId">Function:</label>
+    <br/>
+    <input type="text" id="funcId" name="funcId" list="funcs" {{ 'required=""' if funcRequired else '' }} />
+    <datalist id="funcs">
+      {% for funcId in funcList %}
+        <option value="{{ funcId|e }}">{{ funcId|e }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+  </section>

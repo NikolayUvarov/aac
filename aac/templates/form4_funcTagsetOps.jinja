@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% include 'fragment_funcid.j2' %}
+
+  <br/>
+  {% if not readOnly %}
+    {% include 'fragment_funcsetOp.j2' %}
+  {% else %}
+    {% include 'fragment_funcsetOpRO.j2' %}
+  {% endif %}
+
+  <br/>
+  <label>Tags to apply:</label>
+  {% set nEntries = 10 %}
+  {% set entryName = "tag" %}
+  {% include 'fragment_nEntries.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

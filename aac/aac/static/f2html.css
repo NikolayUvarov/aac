@@ -1,0 +1,38 @@
+.f2html_all { font-family: Verdana,sans-serif; }
+.f2html_hdr { 
+  font-size: 150%; font-weight: bold; 
+  color: Green;
+}
+
+.f2html_param input[type=checkbox]+span { margin-left: 0.5em; }
+.f2html_param span+input[type=checkbox] { margin-left: 0.5em; }
+
+.f2html_param label+input { margin-left: 0.5em; }
+.f2html_param input+label { margin-left: 0.5em; }
+
+#f2html_rawRes {
+  font-family: 'Courier New', monospace;
+  font-size: 75%;
+  color: Green;
+}
+
+#f2html_parsedSect table {
+ border-collapse: collapse;
+}
+
+#f2html_parsedSect td,th {
+  border: 1px solid LightGray;
+  padding: 0.5em;
+  text-align: left;
+}
+
+#f2html_parsedSect td {
+  color: Green;
+}
+
+#f2html_parsedSect thead th {
+  text-align: center;
+}
+
+.f2html_res_done   { background-color: PaleGreen; }
+.f2html_res_failed { background-color: Salmon; }

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>aac - technical index page</title>
+</head>
+
+<style>
+
+  div.samples {display:table; border-collapse: collapse;}
+  div.samples>div {display:table-row;}
+  div.samples>div:first-child {background-color: whitesmoke; text-align:center;}
+  div.samples>div>div {display:table-cell; border:1px solid black; padding-left: 0.5em; padding-right: 0.5em; }
+
+</style>
+
+<body>
+  <img width=64 height=64 src="/aac/static/aac_logo.png" title="AAC logo" style="float: left; margin-right: 10px;">  
+  <h1>aac - technical index page</h1>
+  <hr/>
+
+  <h2>API Samples</h2>
+  <div class="samples" >
+
+    <div>
+      <div>Description</div>
+      <div>Request format</div>
+      <div>POST request body (if applicable)</div>
+    </div>
+
+    <div>
+      <div> <b>Create user</b><br/><i>(optional parameters - life time for the password, days (real number), readable name and session time limit (min))</i></div>
+      <div> <a href="/aac/user/create">/aac/user/create</a> </div>
+      <div> username=USERNAME&secret=SHA256&operator=OPERATOR<i>[&pswlifetime=DAYS][&readablename=READABLENAME][&sessionmax=MINUTES]</i> </div>
+    </div>
+
+    <div>
+      <div> <b>Change user's password and registration data</b><br/><i>(optional parameters - life time for the password, days (real number), readable name and session time limit (min))</i><!--<br/>(Now allowed only for self (operator==username)).--></div>
+      <div> <a href="/aac/user/change">/aac/user/change</a> </div>
+      <div> username=USERNAME&secret=SHA256&operator=OPERATOR<i>[&pswlifetime=DAYS][&readablename=READABLENAME][&sessionmax=MINUTES]</i> </div>
+    </div>
+
+    <div>
+      <div> <b>Delete user</b> </div>
+      <div> <a href="/aac/user/delete">/aac/user/delete</a> </div>
+      <div> username=USERNAME&operator=OPERATOR </div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> <b>Autentificate user</b> </div>
+      <div> <a href="/aac/authentificate">/aac/authentificate</a></div>
+      <div> username=USERNAME&secret=SHA256 </div>
+    </div>
+
+    <div>
+      <div> <i>-- the same (deprecated)</i> </div>
+      <div> <a href="/aac/authentificate">/aac/authentificate?username=USERNAME&secret=SHA256</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> <b>Authorize user</b> for a specific application with returning a package of data<br/>
+            <i>('gAP' and 'thePage' are the applications supported at the moment)</i>
+      </div>
+      <div> <a href="/aac/authorize?app=gAP">/aac/authorize?app=gAP</a><br/>
+            <a href="/aac/authorize?app=thePage">/aac/authorize?app=thePage</a>
+      </div>
+      <div> username=USERNAME&secret=SHA256 </div>
+    </div>
+
+    <div>
+      <div> <i>-- the same (deprecated)</i> </div>
+      <div> <a href="/aac/authorize?app=gAP">/aac/authorize?app=gAP&username=USERNAME&secret=SHA256</a><br/>
+            <a href="/aac/authorize?app=thePage">/aac/authorize?app=thePage&username=USERNAME&secret=SHA256</a>
+      </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Get user's <b>registration details</b> and optional data for an app <br> <i>('gAP' and 'thePage' are the applications supported at the moment)</i></div>
+      <div> <a href="/aac/user/details">/aac/user/details?username=USERNAME[&app={gAP|thePage}]</a></div>
+      <div></div>
+    </div>
+
+    <div><div></div></div>
+
+    <div>
+      <div> <b>Hire employee</b> <br/>(Not above operator's branch)</div>
+      <div> <a href="/aac/hr/hire">/aac/hr/hire</a> </div>
+      <div> username=USERNAME&branch=BRANCH&position=POSITION&operator=OPERATOR </div>
+    </div>
+
+    <div>
+      <div> <b>Fire employee</b> (from his current occupation) <br/>(Not above operator's branch) </div>
+      <div> <a href="/aac/hr/fire">/aac/hr/fire</a> </div>
+      <div> username=USERNAME&operator=OPERATOR </div>
+    </div>
+
+    <div>
+      <div> Get <b>branches with vacant or total positions</b> counter </div>
+      <div> <a href="/aac/hr/branch/positions">/aac/hr/branch/positions?branch={BRANCH|*ALL*}[&perRole={<b>yes</b>|no}][&onlyVacant={<b>yes</b>|no}]</a> </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Create a new position for some role in the branch</div>
+      <div> <a href="/aac/hr/branch/position/create">/aac/hr/branch/position/create</a> </div>
+      <div> branch=BRANCH&role=ROLE </div>
+    </div>
+
+    <div>
+      <div> Delete a position in the branch <br/><i> (position should be vacant) </i></div>
+      <div> <a href="/aac/hr/branch/position/delete">/aac/hr/branch/position/delete</a> </div>
+      <div> branch=BRANCH&role=ROLE </div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Get sub-branches available for employee</div>
+      <div> <a href="/aac/emp/subbranches/list">/aac/emp/subbranches/list?username=USERNAME<i>[&allLevels={<b>yes</b>|no}][&excludeOwn={yes|<b>no</b>}]</i></a> </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Get funcsets available for employee</div>
+      <div> <a href="/aac/emp/funcsets/list">/aac/emp/funcsets/list?username=USERNAME</a> </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Get functions available for employee<br/>'prop' is an optional parameter, by default method returns function ids.</div>
+      <div> <a href="/aac/emp/functions/list">/aac/emp/functions/list?username=USERNAME[&prop={id|name|callpath|title|description|method|contenttype}]</a> </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Get review of functions available for employee - the requested set of properties.</div>
+      <div> <a href="/aac/emp/functions/review">/aac/emp/functions/review?username=USERNAME&props=[id][,name][,callpath][,title][,description][,method][,contenttype]</a> </div>
+      <div></div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Get list of person employeed in the branch <i>(option - with sub-branches)</i></div>
+      <div> <a href="/aac/branch/employees/list">/aac/branch/employees/list?branch=BRANCH<i>[&includeSubBranches={<b>no</b>|yes}]</i></a> </div>
+      <div></div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Full list of all users </div>
+      <div> <a href="/aac/users/list">/aac/users/list</a> </div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> List all known functions - give one specific property<br/><i>(format as a list)</i> </div>
+      <div> <a href="/aac/functions/list">/aac/functions/list?prop={id|name|callpath|title|description|method|contenttype}</a> </div>
+      <div></div>
+    </div>
+                                                                           
+    <div>
+      <div> Review all known functions - giving desired set of properties<br/><i>(format as a dictionary)</i> </div>
+      <div> <a href="/aac/functions/review">/aac/functions/review?props=[id][,name][,callpath][,title][,description][,method][,contenttype]</a> </div>
+      <div></div>
+    </div>
+                                                                           
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Review one function (specified by id) - to get a desired set of properties<br/><i>(format as a dictionary)</i> </div>
+      <div> <a href="/aac/function/review">/aac/function/review?funcId=FUNCID&props=[id][,name][,callpath][,title][,description][,method][,contenttype]</a> </div>
+      <div></div>
+    </div>
+                                                                           
+    <div>
+      <div> Get one function XML description from catalogue<br/><i>(option - pure xml without json wrappiing)</i><br/><i>(option - inject reference to external XSLT)</i></div>
+      <div> <a href="/aac/function/info">/aac/function/info?funcId=FUNCID<i>[&pure=<b>no</b>|yes][&xsltref=URL-TO-XSLT]</i></a> </div>
+      <div></div>
+    </div>
+                                                                         
+    <div>
+      <div> Upload function XML description to catalogue <b>from text</b><br/>(new one or update)<br/></div>
+      <div> <a href="/aac/function/upload/xmldescr">/aac/function/upload/xmldescr</a></div>
+      <div> xmltext=URLENCODED_TEXT </div>
+    </div>
+
+    <div>
+      <div> Upload function XML description to catalogue <b>from file</b><br/>(new one or update)<br/></div>
+      <div> <a href="/aac/function/upload/xmlfile">/aac/function/upload/xmlfile</a></div>
+      <div> <i>multipart/form-data</i> with file in <b>xmlfile</b> field </div>
+    </div>
+                                                                         
+    <div>
+      <div> Delete function XML description from catalogue</div>
+      <div> <a href="/aac/function/delete">/aac/function/delete</a></div>
+      <div> funcId=FUNCID </div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> List all funcsets <br/><i>(reminder: funcset IDs are unique and global)</i></div>
+      <div> <a href="/aac/funcsets">/aac/funcsets</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> <b>Create funcset</b> in some branch<br/><i>(Readable funcset name is a welcomed option)</i></div>
+      <div> <a href="/aac/funcset/create">/aac/funcset/create</a></div>
+      <div> branch=BRANCHID&funcset=FUNCSET<i>[&readablename=READABLENAME]</i> </div>
+    </div>
+
+    <div>
+      <div> <b>Delete funcset</b> with unique ID</div>
+      <div> <a href="/aac/funcset/delete">/aac/funcset/delete</a></div>
+      <div> funcset=FUNCSET </div>
+    </div>
+
+    <div>
+      <div> Give <b>funcset details</b> (including functions list) </div>
+      <div> <a href="/aac/funcset/details">/aac/funcset/details?funcset=FUNCSET</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Add a function to a funcset</div>
+      <div> <a href="/aac/funcset/function/add">/aac/funcset/function/add</a></div>
+      <div> funcset=FUNCSET&funcId=FUNCID </div>
+    </div>
+
+    <div>
+      <div> Remove a function from a funcset</div>             
+      <div> <a href="/aac/funcset/function/remove">/aac/funcset/function/remove</a></div>
+      <div> funcset=FUNCSET&funcId=FUNCID </div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> List funcsets of some role (defined in a branch) </div>
+      <div> <a href="/aac/role/funcsets">/aac/role/funcsets?branch=BRANCHID&role=ROLENAME</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Add a funcset to a role (defined in a branch)</div>
+      <div> <a href="/aac/role/funcset/add">/aac/role/funcset/add</a></div>
+      <div> branch=BRANCHID&role=ROLENAME&funcset=FUNCSET </div>
+    </div>
+
+    <div>
+      <div> Remove a funcset from a role (defined in a branch)</div>
+      <div> <a href="/aac/role/funcset/remove">/aac/role/funcset/remove</a></div>
+      <div> branch=BRANCHID&role=ROLENAME&funcset=FUNCSET </div>
+    </div>
+                                                                  
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Create a new role in some branch<br/>(with some initial labor duties)</div>
+      <div> <a href="/aac/branch/role/create">/aac/branch/role/create</a></div>
+      <div> branch=BRANCHID&role=ROLENAME[&duties=FUNCSET1[&duties=FUNCSET2[&...]]] </div>
+    </div>
+
+    <div>
+      <div> Delete a role definition from a branch </div>
+      <div> <a href="/aac/branch/role/delete">/aac/branch/role/delete</a></div>
+      <div> branch=BRANCHID&role=ROLENAME </div>
+    </div>
+                                                                  
+    <div>
+      <div> List roles defined (or available) in some branch<br/> (option - including inherited roles) </div>
+      <div> <a href="/aac/branch/roles/list">/aac/branch/roles/list?branch=BRANCHID<i>[&inherited={<b>no</b>|yes}][&withbranchids={<b>no</b>|yes}]</i></a></div>
+      <div></div>
+    </div>
+
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> List sub-branches of a specified branch (with no hierarhy).</br><i>(This method provides also a full list of all branches if empty branch id given)</i> </div>
+      <div> <a href="/aac/branch/subbranches">/aac/branch/subbranches?branch=BRANCHID</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Add new empty sub-branch to the specified branch </div>
+      <div> <a href="/aac/branch/subbranch/add">/aac/branch/subbranch/add</a></div>
+      <div> branch=BRANCHID&subbranch=SUBBRANCHID </div>
+    </div>
+
+    <div>
+      <div> Delete branch (specified by unique id)</br><i>(Reminder: don't forget to fire employees first!)</i> </div>
+      <div> <a href="/aac/branch/delete">/aac/branch/delete</a></div>
+      <div> branch=BRANCHID </div>
+    </div>
+                              
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Get whitelist of funcsets for a branch </div>
+      <div> <a href="/aac/branch/fswhitelist/get">/aac/branch/fswhitelist/get?branch=BRANCHID</a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Set whitelist of funcsets for a branch </div>
+      <div> <a href="/aac/branch/fswhitelist/set">/aac/branch/fswhitelist/set</a></div>
+      <div> branch=BRANCHID[&white=FUNCSET1[&white=FUNCSET2[&...]]][&propparent=<b>no</b>|yes] </div>
+    </div>
+                              
+    <div><div></div><div></div><div></div></div>
+
+    <div>
+      <div> Modify a <b>set of tags</b> of some function with methods: SET, OR, AND, MINUS.<br/>Result will be stored and returned. </div>
+      <div> <a href="/aac/function/tagset/modify">/aac/function/tagset/modify</a></div>
+      <div> funcId=FUNCID&method={SET|OR|AND|MINUS}[&tag=TAG1[&tag=TAG2[&...]]] </div>
+    </div>                              
+
+    <div>
+      <div> Test <b>set of tags</b> of some function with methods: OR, AND, MINUS, without storying. </div>
+      <div> <a href="/aac/function/tagset/test">/aac/function/tagset/test</a></div>
+      <div> funcId=FUNCID&method={OR|AND|MINUS}[&tag=TAG1[&tag=TAG2[&...]]] </div>
+    </div>                              
+
+    <div><div></div><div></div><div></div></div>
+    <div>
+      <div> List agents in some branch or everywhere <br/> <i>option1 - including subsidinaries, option2 - with location branch</i>  </div>
+      <div> <a href="/aac/agents/list"> /aac/agents/list?branch={BRANCH|*ALL*}[&subsidinaries={<b>no</b>|yes}][&location={<b>no</b>|yes}] </a></div>
+      <div></div>
+    </div>
+
+    <div>
+      <div> Register new agent in some branch<br/><i>Optional fields can be provided.</i><br/><i>*ROOT* as branchname to register in root branch.</i> </div>
+      <div> <a href="/aac/agent/register">/aac/agent/register</a> </div>
+      <div> branch=BRANCH&agent=AGENTID[&descr=DESCRIPTION][&location=LOCATION][&tags=COMMA-SEPARATED-TAGS][&extraxml=OPTIONALXMLTAGS] </div>
+    </div>
+
+    <div>
+      <div> Move pre-registered agent to subsidiary branch <i>(denial if not registered)</i><br/>New descriptive details can be added.</div>
+      <div> <a href="/aac/agent/movedown">/aac/agent/movedown</a> </div>
+      <div> branch=BRANCH&agent=AGENTID[&descr=DESCRIPTION][&location=LOCATION][&tags=COMMA-SEPARATED-TAGS][&extraxml=OPTIONALXMLTAGS] </div>
+    </div>
+
+    <div>
+      <div> Unregister an agent </div>
+      <div> <a href="/aac/agent/unregister">/aac/agent/unregister</a> </div>
+      <div> agent=AGENTID </div>
+    </div>
+
+    <div>
+      <div> Give an agent details in XML format </div>
+      <div> <a href="/aac/agent/details/xml">/aac/agent/details/xml?agent=AGENTID</a> </div>
+      <div>  </div>
+    </div>
+
+    <div>
+      <div> Give an agent details in JSON format </div>
+      <div> <a href="/aac/agent/details/json">/aac/agent/details/json?agent=AGENTID</a> </div>
+      <div>  </div>
+    </div>
+
+
+  </div>
+
+
+  <hr/>
+  <small>(C) RDSC 2022</small>
+
+</body>
+</html>

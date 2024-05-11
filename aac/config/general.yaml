@@ -1,0 +1,19 @@
+﻿default_run_location: "public-internet" # where from to run if not specified by command line
+session_max_default: 60 # minutes - lifetime for session if not configured for person individually
+
+run_locations:
+  public-internet:
+    port: 5001 # port to access server by http(s)
+    cors_whitelist:
+      - "http://127.0.0.1:5000"  # requests from tSK
+      - "http://localhost:5000"  # just for the case
+      - "http://127.0.0.1:5001"  # requests from own pages (internal testing etc)
+
+  rdsctest:
+    port: 5001
+    cors_whitelist: 
+      - "http://127.0.0.1:5000"   # requests from tSK
+      - "http://localhost:5000"   # just for the case
+      - "http://d.rdsc.ru:14300"  # pages from proxied tSK and AAC
+      - "http://d.rdsc.ru:14500"  # pages from directly exposed tSK
+      - "http://d.rdsc.ru:5001"   # pages from directly exposed AAC

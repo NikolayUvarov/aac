@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="post">
+
+  <label for="username">User name:</label>
+  <br/>
+  <input type="text" id="username" name="username" required="" list="users" value="{{ init.u|e }}"/>
+  <datalist id="users">
+    {% for userId in userList %}
+      <option value="{{ userId|e }}">{{ userId|e }}</option>
+    {% endfor %}
+  </datalist>
+  <br/>
+  
+
+  <label for="branch">Branch:</label>
+  <br/>
+  <input type="text" id="branch" name="branch" list="branches" value="{{ init.b|e }}" onchange="if(!position.value.length) this.form.submit()"/>
+  <datalist id="branches">
+    {% for branch in branchReview %}
+      <option value="{{ branch.id|e }}">{{ branch.id|e }} - {{ branch.vacancies|length }} {{init.p}} vacancies</option>
+    {% endfor %}
+  </datalist>
+  <br/>
+
+  <label for="position">Position:</label>
+  <br/>
+  <input type="text" id="position" name="position" list="positions" style="width:60em;" value="{{ init.p|e }}" onchange="if(!branch.value.length) this.form.submit()"/>
+  <datalist id="positions">
+      {% for p in posReview %}
+        <option value="{{ p.pos|e }}">{{ p.pos|e }} at {{ p.branch|e }} - {{ "VACANT" if p.vacant else "OCCUPIED" }}</option>
+      {% endfor %}
+  </datalist>
+  <br/>
+  
+  <br/>
+  {% include 'fragment_operator.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+﻿session_max_default: 60 # minutes - lifetime for session if not configured for person individually
+default_run_location: "public-internet" # where from to run if not specified by command line
+
+run_locations:
+  public-internet:
+    port: 12345 # port to access server by http(s)
+    cors_whitelist:
+      - "http://127.0.0.1:12345"  # requests from own pages (internal testing etc)
+      - "http://localhost:12345"  # just for the case

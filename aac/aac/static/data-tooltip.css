@@ -1,0 +1,26 @@
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    font: initial;
+    font-family: Verdana,sans-serif;
+    content: attr(data-tooltip); 
+    position: absolute;
+    max-width: 15em; 
+    left: 0; top: 0;
+    background: DarkCyan; 
+    color: WhiteSmoke;
+    padding: 0.5em; 
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    border-radius: 0.5em;
+    pointer-events: none; 
+    opacity: 0; 
+    transition: 1s;
+    z-index:1;
+} 
+
+[data-tooltip]:hover::after {
+    opacity: 1; 
+    top: 2em; 
+}

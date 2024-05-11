@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="{{ 'get' if branchInit=='' else 'post' }}" >
+
+  {% include 'fragment_branch.j2' %}
+
+  <br/>  
+  <label>
+    <input type="checkbox" name="propparent" value="yes" {{'checked=""' if init.propagate_parent_flag else '' }} /> 
+    <span>Propagate head branch's whitelist</span> 
+  </label>
+  <br/>  
+
+  <br/>  
+  <label>White list of funcsets:</label> <br/>
+  {% for fs in funcSets %}
+    <label>
+      <input type="checkbox" name="white" value="{{fs|e}}" {{'checked=""' if fs in init.funcsets else '' }} /> 
+      <span> {{ fs }} </span>
+    </label> 
+    <br/>
+  {% endfor %}
+  <br/>  
+
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

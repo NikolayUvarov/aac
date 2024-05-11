@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form>
+
+  {% include 'fragment_funcid.j2' %}
+
+  <label><input type="checkbox" name="pure" value="yes" checked=""> Give pure XML description without JSON wrapping</label>
+  <br/>  
+
+  <br/>  
+  <label>
+    <span>Optional reference to exeternal XSLT, to inject into XML header: </span>
+    <input type="text" name="xsltref" list="xsltRefs"/> <br/>
+    <datalist id="xsltRefs">
+        <option value="/aac/static/f2html.xsl"></option>
+        <option value="http://127.0.0.1:5001/aac/static/f2html.xsl"></option>
+    </datalist>
+  </label>
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

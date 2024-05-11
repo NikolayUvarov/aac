@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+
+<form method="post"
+>
+
+  <label for="xmltext">Type or paste XML description for the function here:</label>
+  <br/>
+  <textarea rows="20" cols="120" wrap="soft" id="xmltext" name="xmltext" placeholder="Place for XML function description"
+>
+&lt;function id="FUNCTIONID" name="FUNCTION NAME" title="FUNCTION TITLE" descr="FUNCTION DESCRIPTION">
+  &lt;in>
+    &lt;str entry="SAMPLEPAR" name="PAR NAME" title="PAR TITLE"/>
+  &lt;/in>
+  &lt;call method="POST">
+    &lt;url>SOME/CALL/PATH&lt;/url>
+    &lt;body content-type="application/x-www-form-urlencoded">par=&lt;insert from="SAMPLEPAR"/>&lt;/body>
+  &lt;/call>
+  &lt;out format="json">
+    &lt;done if="$.result" eq="true" title="Well done!"/>
+    &lt;failed>
+      &lt;str id="FAIL_REASON" select="$.reason" title="Failure reason"/>
+    &lt;/failed>
+  &lt;/out>
+&lt;/function>
+</textarea>
+  <br/>
+
+  <br/>
+  <input type="submit" value="Submit"/>
+  
+</form> 
+
+</body>
+</html>

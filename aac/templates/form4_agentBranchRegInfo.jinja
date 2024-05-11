@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form {{ 'method="'+formMethod+'"' if formMethod else '' }} >
+
+  {% include 'fragment_agent.j2' %}
+  {% include 'fragment_branch.j2' %}
+  <br/>
+
+  {% for txtin in extratxtinputs %}
+    <label> <span>{{txtin[1]}}:</span> <br/> <input type="text" name="{{txtin[0]}}" value="{{txtin[2]}}"></label>
+    <br/>  
+  {% endfor %}
+
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

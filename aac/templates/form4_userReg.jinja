@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="/aac/static/minicrypto.js"></script>
+<script>
+  function buildHiddens() {
+    document.getElementById('secret').value = minicrypto_sha256( encodeURI( document.getElementById('password').value
+                                                                          + document.getElementById('username').value ));
+  }
+</script>
+
+</head>
+<body>
+
+<form method="post" onsubmit="buildHiddens()">
+
+  {% include 'fragment_userid.j2' %}
+
+  <label>
+    <span>Readable user name:</span>
+    <br/>
+    <input type="text" name="readablename" value="{{init.readable_name}}"/>
+  </label>
+  <br/>
+
+  {% include 'fragment_password.j2' %}
+
+  <br/>
+  <label>Password valid for <input type="number" name="pswlifetime" id="valDays" min="0" value="365"/> days</label>
+  <br/>
+  <label><input type="checkbox" id="neverExp" onclick="
+    if(this.checked) document.getElementById('valDays').setAttribute('disabled',''); else document.getElementById('valDays').removeAttribute('disabled');
+  "/> Password never expires</label>  
+  <br/>
+
+  <br/>
+  <label>Maximum duration of session <input type="number" name="sessionmax" min="0" value="{{init.session_max}}"/> minutes</label>
+  <br/>
+
+  <br/>
+  {% include 'fragment_operator.j2' %}
+  <br/>
+
+  <br/>
+  <input type="submit" value="Submit"/>
+  
+</form> 
+
+</body>
+</html>

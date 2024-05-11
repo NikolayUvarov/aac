@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="post" >
+
+  {% include 'fragment_branch.j2' %}
+  {% include 'fragment_role.j2' %}
+
+  <br/>  
+  <label>List of labor duties (funcsets):</label> <br/>
+  {% for fs in funcSets %}
+    <label>
+      <input type="checkbox" name="duties" value="{{fs|e}}" {{'disabled=""' if fs not in enabledFuncSets else '' }} /> 
+      <span> {{ fs }} </span>
+    </label> 
+    <br/>
+  {% endfor %}
+  <br/>  
+
+  <br/>
+  <input type="submit" value="Submit" {{'disabled=""' if submitDisabled else '' }} />          
+
+</form> 
+
+</body>
+</html>

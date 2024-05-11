@@ -1,0 +1,22 @@
+﻿<languages default="en-GB">
+  <!-- ############################################################################################################################### -->
+  <language id="en-GB">
+    <name  data-id="Create user">Create user</name>
+    <title data-id="Create user"><b>Create</b> new <b>user</b> with unique name</title>
+    <descr data-id="Create user">Create new user with unique name.<br/>Password must be provided.<br/>Optionally a password expiration time can specified.</descr>
+    <title data-id="Unique user name">Unique user name</title>
+    <descr data-id="User name (new user)">Unique name will be used futher as an id to login user to the system.<br/>Any characters are acceptable.</descr>
+    <title data-id="Password to login user">Password to login user</title>
+    <descr data-id="Password to login user">Password to login user to the system.<br/>Non zero length.<br/>Any characters are acceptable.</descr>
+    <title data-id="password expires">password expires</title>
+    <name  data-id="Delete user">Delete user</name>
+    <title data-id="Delete user"><b>Delete</b> existing user</title>
+    <descr data-id="Delete user">Delete a user from the database</descr>
+  </language>
+  <!-- ############################################################################################################################### -->
+  <language id="ru-RU">
+    <name  data-id="Create user">Создать пользователя</name>
+    <title data-id="Unique user name">Уникальное имя пользователя</title>
+  </language>
+  <!-- ############################################################################################################################### -->
+</languages>

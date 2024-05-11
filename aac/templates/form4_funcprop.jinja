@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="get">
+
+  {% if userList %}
+    {% include 'fragment_userid.j2' %}
+  {% endif %}
+
+  {% if funcList %}
+    {% include 'fragment_funcid.j2' %}
+  {% endif %}
+
+  {% include 'fragment_funcprops_radio.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>

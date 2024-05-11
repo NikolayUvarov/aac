@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="/aac/static/minicrypto.js"></script>
+</head>
+<body>
+
+<form method="post"
+      onsubmit="document.getElementById('secret').value = minicrypto_sha256( encodeURI( document.getElementById('password').value
+                                                                                      + document.getElementById('username').value ))"
+>
+
+  {% include 'fragment_userid.j2' %}
+  {% include 'fragment_password.j2' %}
+
+  <br/>
+  <input type="submit" value="Submit"/>
+  
+</form> 
+
+</body>
+</html>

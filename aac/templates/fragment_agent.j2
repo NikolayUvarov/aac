@@ -1,0 +1,22 @@
+  <section>
+    
+     {% if not label4Agent %}
+       {% set label4Agent = 'Agent' %}
+     {% endif %}
+    
+
+    <label for="agent">{{label4Agent}}:</label>
+    <br/>
+    <input type="text" id="agent" name="agent" list="agents" 
+           {{ '' if agentCanBeEmpty else 'required=""' }}
+           {{ 'value="'+agentInit+'"' if agentInit else '' }}
+           {{ 'onchange="this.form.submit()"' if agentAutoSubmit else '' }}
+    />
+    <datalist id="agents">
+      {% for agentId in agentsList %}
+        <option value="{{ agentId|e }}">{{ agentId }}</option>
+      {% endfor %}
+    </datalist>
+    <br/>
+
+  </section>

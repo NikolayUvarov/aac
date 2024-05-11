@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form>
+
+  {% include 'fragment_userid.j2' %}
+  
+
+  <label><input type="radio" name="allLevels" value="yes" checked=""> Sub-branches of all levels</label>
+  <br/>
+  <label><input type="radio" name="allLevels" value="no"> Only direct sub-branches</label>
+  <br/>
+  <br/>
+
+  
+  <label><input type="checkbox" name="excludeOwn" value="yes"> Exclude own branch</label>
+  <br/>  
+  <br/>  
+
+  <br/>
+  <input type="submit" value="Submit"/>
+
+</form> 
+
+</body>
+</html>
