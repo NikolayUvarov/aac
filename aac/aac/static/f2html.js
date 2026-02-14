@@ -6,7 +6,7 @@ function f2html_callSync(url,body,method,contenttype) {
 
     console.log("Executing request " + JSON.stringify(url) + " with sync "+ method);
 
-    xhttp = new XMLHttpRequest(); 
+    var xhttp = new XMLHttpRequest();
     xhttp.open(method, url, false);
     if(contenttype!="")
         xhttp.setRequestHeader('Content-Type', contenttype)  
@@ -50,7 +50,7 @@ function f2html_serialize_url(value) {
 }
 
 function f2html_serialize_var(value) {
-    return string(value) // ? need clarification what is "var" purpose
+    return String(value) // ? need clarification what is "var" purpose
 }
 
 //---------------------------

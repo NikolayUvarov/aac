@@ -61,8 +61,8 @@ def aac_rq_handler(afunc):
     @wraps(afunc)
     async def wrapped(*args, **kwargs):
 
-        logger.info(f"Request is {fwrk.request}, raw body of content type {repr(fwrk.request.content_type)} is {await fwrk.request.get_data()}")
-        logger.info( "Request cookies: " + ",".join( f"{x}:{repr(fwrk.request.cookies[x])}" for x in fwrk.request.cookies ) )
+        logger.info(f"Request is {fwrk.request}, content type {repr(fwrk.request.content_type)}")
+        logger.debug( "Request cookies: " + ",".join( f"{x}:{repr(fwrk.request.cookies[x])}" for x in fwrk.request.cookies ) )
 
         logRet,ret = await afunc(*args, **kwargs)
 
@@ -423,7 +423,8 @@ async def funcInfo():
                                                    funcRequired = True, 
                                                    funcList = storage.listFunctions("id")["values"]
                                                  ))
-    hdr = '' if xsltref=='' else f'<?xml version="1.0" encoding="UTF-8"?>\n<?xml-stylesheet type="text/xsl" href="{xsltref}"?>\n\n'
+    from xml.sax.saxutils import quoteattr
+    hdr = '' if xsltref=='' else f'<?xml version="1.0" encoding="UTF-8"?>\n<?xml-stylesheet type="text/xsl" href={quoteattr(xsltref)}?>\n\n'
     tmp = storage.getFunctionDef(functionId,False,hdr)
 
     if pure=='yes' and tmp['result']:
@@ -992,7 +993,7 @@ async def get_branches():
 @app.route('/aac/positions', methods=["GET"])
 @aac_rq_handler
 async def get_positions():
-    branch = await fwrk.request.args.get("filter", default="")
+    branch = fwrk.request.args.get("filter", default="")
     return (True, add_respcode_by_reason({'result': True, 'data':storage.getPositions(branch)}))
 
 #----------------------------------------------------------------------------
@@ -1005,7 +1006,7 @@ def adjustLogging(filename):
             print('Starting with logger configuration:\n'+ repr(cfgDict))
             logging.config.dictConfig(cfgDict)
             #logger.info('Starting with logger configuration:\n'+ repr(cfgDict))
-        except:
+        except Exception:
             print('Logger configuration failure',file=sys.stderr)
             raise
 
@@ -1049,7 +1050,7 @@ async def main():
             global cfgDict
             cfgDict = yaml.safe_load(cfgStream)
             logger.info('Configuration dictionary:\n'+ repr(cfgDict))
-        except:
+        except Exception:
             logger.exception('General config problem')
             raise
 
@@ -1070,10 +1071,10 @@ async def main():
 
 
     # and running server:
-    await app.run_task( 
-        host='0.0.0.0', 
-        port= cfgDict["run_locations"][runAt]["port"], 
-        debug=True,
+    await app.run_task(
+        host='0.0.0.0',
+        port= cfgDict["run_locations"][runAt]["port"],
+        debug=cfgDict.get("debug", False),
         )
 
     logger.info('aac exited')
