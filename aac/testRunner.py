@@ -58,7 +58,7 @@ class testTask:
         self._final_dict['total_exec_time'] = (time.monotonic_ns() - self._task_started_at) // 1000
         self._final_dict['state'] = "done"
         type(self).__done_tasks[tId] = type(self).__running_tasks.pop(tId)
-        logger.info(f"Task {tId} done, finished tasks storage is: {type(self).__running_tasks.keys()}")
+        logger.info(f"Task {tId} done, finished tasks storage is: {type(self).__done_tasks.keys()}")
 
     #-----------
 
