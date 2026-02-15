@@ -73,7 +73,7 @@ class testTask:
                    }
         elif taskid in cls.__done_tasks:
             taskObj = cls.__done_tasks.pop(taskid)
-            logger.info(f"Task {taskid} result requested and removed from a finished tasks storage that is now: {cls.__running_tasks.keys()}")
+            logger.info(f"Task {taskid} result requested and removed from a finished tasks storage that is now: {cls.__done_tasks.keys()}")
             return taskObj._final_dict
         else:
             return { 'result': False,

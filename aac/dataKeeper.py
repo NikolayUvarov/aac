@@ -4,12 +4,14 @@ from lxml import etree
 import os
 import time
 import re
+import asyncio
 from agentsKeeper import agentsDataKeeper
+import error_codes as EC
 
 #--------------------------------------------------------------------------------------------------------------
 # XPath injection protection: validate that user-supplied identifiers contain only safe characters.
 
-_SAFE_ID_RE = re.compile(r'^[\w\-\.@\+ ]{0,256}$', re.UNICODE)
+_SAFE_ID_RE = re.compile(r'^[\w\-\.@\+: ]{0,256}$', re.UNICODE)
 
 def _safe_xpath_value(value):
     """Validate that a value is safe to interpolate into an XPath expression.
@@ -31,6 +33,10 @@ logger = logging.getLogger(_logName)
 
 class configDataKeeper:
 
+    # Deferred-save tunables
+    FLUSH_INTERVAL_SEC = 60   # flush at most every N seconds after first change
+    FLUSH_CHANGE_THRESHOLD = 20  # …or after N accumulated changes, whichever is sooner
+
     #-------------
     def __init__(self, data_catalogue, default_sess_max):
 
@@ -42,33 +48,54 @@ class configDataKeeper:
 
         self._agents_keeper = agentsDataKeeper(data_catalogue)
 
+        # Thread-safety: asyncio.Lock guards all read-modify-write sequences
+        self._lock = asyncio.Lock()
+
+        # Deferred-save state
+        self._dirty_universe = False
+        self._dirty_catalogues = False
+        self._pending_changes = 0
+        self._flush_timer_handle = None   # asyncio.TimerHandle
+        self._loop = None                 # set in load()
+        self._force_flush_next = False    # set by set_flush_now()
+
     #-------------
     def load(self):
         self._xmlstorage = etree.parse( self._filename, self._parser )
-        logger.info(f"Data for Config Data Keeper loaded from {self._filename}") 
-        logger.debug(f"Data tree is:\n" + etree.tostring(self._xmlstorage, pretty_print=True, encoding='unicode' )) 
+        logger.info(f"Data for Config Data Keeper loaded from {self._filename}")
+        logger.debug(f"Data tree is:\n" + etree.tostring(self._xmlstorage, pretty_print=True, encoding='unicode' ))
 
         self._xmlcats = self._getCatalogues()
 
         self._agents_keeper.init_data()
 
+        # Capture the running event loop for deferred-save timer scheduling
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None   # not running inside an event loop (e.g. self-test)
+
 
     #-------------
     def _getCatalogues(self):
         ret = etree.parse( self._cFilename, self._parser )
-        logger.info(f"Data for Catalogues loaded from {self._cFilename}") 
-        #logger.debug(f"Data tree is:\n" + etree.tostring(ret, pretty_print=True, encoding='unicode' )) 
+        logger.info(f"Data for Catalogues loaded from {self._cFilename}")
+        #logger.debug(f"Data tree is:\n" + etree.tostring(ret, pretty_print=True, encoding='unicode' ))
         return ret
 
     #-------------
-    def _save(self, catalogues=False):
+    # ---- Low-level disk write ("castling") ----
+
+    def _flush_to_disk(self, catalogues=False):
+        """Atomic-ish write: temp → rename dance (the original 'castling')."""
 
         baseFName = self._cFilename if catalogues else self._filename
-        tempFilename,bkFilename = (baseFName+sfx for sfx in (".temp.xml",".bk.xml"))
+        tempFilename, bkFilename = (baseFName + sfx for sfx in (".temp.xml", ".bk.xml"))
 
-        textdump = etree.tostring(self._xmlcats if catalogues else self._xmlstorage, pretty_print=True, encoding='unicode' )
+        textdump = etree.tostring(self._xmlcats if catalogues else self._xmlstorage,
+                                  pretty_print=True, encoding='unicode')
 
-        with open(tempFilename,"w", encoding='utf-8-sig') as f:
+        with open(tempFilename, "w", encoding='utf-8-sig') as f:
             f.write(textdump)
         logger.debug(f"Database successfully dumped to {tempFilename}")
 
@@ -77,8 +104,86 @@ class configDataKeeper:
         os.rename(baseFName, bkFilename)
         os.rename(tempFilename, baseFName)
 
-        logger.info(f"Castling made, old data is in {bkFilename}, new one in {baseFName}") 
-        
+        logger.info(f"Castling made, old data is in {bkFilename}, new one in {baseFName}")
+
+    # ---- Deferred-save logic ----
+
+    def _schedule_flush_timer(self):
+        """Start the deferred-flush timer if not already running."""
+        if self._flush_timer_handle is not None:
+            return  # timer already ticking
+        if self._loop is None:
+            return  # no event loop — will flush synchronously
+        self._flush_timer_handle = self._loop.call_later(
+            self.FLUSH_INTERVAL_SEC, self._timer_callback)
+        logger.debug(f"Deferred flush timer scheduled ({self.FLUSH_INTERVAL_SEC}s)")
+
+    def _timer_callback(self):
+        """Called by the event loop when the flush timer fires."""
+        self._flush_timer_handle = None
+        asyncio.ensure_future(self._do_flush())
+
+    async def _do_flush(self):
+        """Perform the actual disk flush (under lock)."""
+        async with self._lock:
+            self._flush_pending()
+
+    def _flush_pending(self):
+        """Flush any dirty trees to disk and reset counters.  Caller must hold the lock."""
+        if not (self._dirty_universe or self._dirty_catalogues):
+            return
+        if self._dirty_universe:
+            self._flush_to_disk(catalogues=False)
+            self._dirty_universe = False
+        if self._dirty_catalogues:
+            self._flush_to_disk(catalogues=True)
+            self._dirty_catalogues = False
+        self._pending_changes = 0
+        if self._flush_timer_handle is not None:
+            self._flush_timer_handle.cancel()
+            self._flush_timer_handle = None
+        logger.info(f"Pending changes flushed to disk")
+
+    def _save(self, catalogues=False, flush_now=False):
+        """Mark data as dirty and optionally force an immediate flush.
+
+        The actual disk write is deferred until one of:
+          • FLUSH_CHANGE_THRESHOLD changes accumulated
+          • FLUSH_INTERVAL_SEC seconds since the first un-flushed change
+          • explicit flush_now=True
+          • shutdown()
+        """
+        if catalogues:
+            self._dirty_catalogues = True
+        else:
+            self._dirty_universe = True
+        self._pending_changes += 1
+
+        should_flush = (flush_now
+                        or self._force_flush_next
+                        or self._pending_changes >= self.FLUSH_CHANGE_THRESHOLD
+                        or self._loop is None)  # no event loop → sync mode
+
+        if should_flush:
+            self._flush_pending()
+        else:
+            self._schedule_flush_timer()
+            logger.debug(f"Change #{self._pending_changes} deferred (threshold {self.FLUSH_CHANGE_THRESHOLD})")
+
+    def set_flush_now(self):
+        """Tell the next _save() call to flush immediately (used by the request decorator)."""
+        self._force_flush_next = True
+
+    def flush_if_dirty(self):
+        """Flush pending changes if any exist (synchronous, assumes lock not held)."""
+        self._flush_pending()
+        self._force_flush_next = False
+
+    def shutdown(self):
+        """Flush all pending changes to disk.  Call on application shutdown."""
+        logger.info("Shutdown requested — flushing pending changes")
+        self._flush_pending()
+
 
     #-------------
     def _getUserNode(self,userid):
@@ -122,11 +227,11 @@ class configDataKeeper:
     def get_user_reg_details(self,userid,app_name=None):
 
         if userid is None:
-            return configDataKeeper._internEx( "WRONG-FORMAT", f"Not all required parameters are given: user id {repr(userid)}" ).dict4api
+            return configDataKeeper._internEx( EC.WRONG_FORMAT, f"Not all required parameters are given: user id {repr(userid)}" ).dict4api
 
         unode = self._getUserNode(userid)
         if unode is None:
-            return configDataKeeper._internEx( "USER-UNKNOWN", f"User '{userid}' is unknown" ).dict4api
+            return configDataKeeper._internEx( EC.USER_UNKNOWN, f"User '{userid}' is unknown" ).dict4api
 
         ret = { 'result': True, 
                  'secret_changed': int(unode.get('pswChangedAt')),
@@ -138,14 +243,14 @@ class configDataKeeper:
               }
         if not app_name in (None, ""):
             self._add_app_details(ret,app_name,userid)
-        logger.info(f"User '{userid}' reg data prepared: {ret}")
+        logger.debug(f"User '{userid}' reg data prepared: {ret}")
         return ret
                 
     #-------------
     def authorize(self,userid,secret,app_name):
 
         if secret is None:
-            return configDataKeeper._internEx( "WRONG-FORMAT", f"Not all required parameters are given: secret is {repr(secret)}" ).dict4api
+            return configDataKeeper._internEx( EC.WRONG_FORMAT, f"Not all required parameters are given: secret is {repr(secret)}" ).dict4api
 
         ret = self.get_user_reg_details(userid,app_name)
         if ret['result']:
@@ -154,14 +259,14 @@ class configDataKeeper:
             if secret != unode.get('secret'):
                 failures += 1
                 self._procFailure(unode, failures, f"User '{userid}' made {failures} password mistake(s)")
-                return { 'result': False, 'reason':'WRONG-SECRET', 'failures':failures }
+                return { 'result': False, 'reason':EC.WRONG_SECRET, 'failures':failures }
 
             expiretime = int(unode.get('expireAt')) if "expireAt" in unode.attrib else 0
             currtime = int(time.time())
             if expiretime and currtime > expiretime:
                 failures += 1
                 self._procFailure(unode, failures, f"Password of '{userid}' expired at {time.ctime(expiretime)}, failures counter is {failures}")
-                return { 'result': False, 'reason':'SECRET-EXPIRED','secret_expiration': expiretime, 'failures':failures }
+                return { 'result': False, 'reason':EC.SECRET_EXPIRED,'secret_expiration': expiretime, 'failures':failures }
 
             logger.info(f"User '{userid}' authentificated")
             unode.set( 'failures', "0" )
@@ -184,11 +289,11 @@ class configDataKeeper:
             return ex.dict4api
 
         if funcset_id is None or funcset_id=="":
-            return configDataKeeper._internEx( 'WRONG-FORMAT', f"Required argument not given: funcset is {repr(funcset_id)}" ).dict4api
+            return configDataKeeper._internEx( EC.WRONG_FORMAT, f"Required argument not given: funcset is {repr(funcset_id)}" ).dict4api
 
         funcset_id = _safe_xpath_value(funcset_id)
         if len(etree.XPath(f'//branch/deffuncsets/funcset[@id="{funcset_id}"]')(self._xmlstorage)):
-            return configDataKeeper._internEx( "ALREADY-EXISTS", f"Funcset {repr(funcset_id)} already defined somewhere", bad_value=funcset_id ).dict4api
+            return configDataKeeper._internEx( EC.ALREADY_EXISTS, f"Funcset {repr(funcset_id)} already defined somewhere", bad_value=funcset_id ).dict4api
 
         fsnode = etree.SubElement(defFsNode, "funcset")
         fsnode.set("id",funcset_id)
@@ -213,15 +318,15 @@ class configDataKeeper:
     def _getFsNode(self,funcset_id,**kwargs):
 
         if funcset_id is None or funcset_id=="":
-            raise configDataKeeper._internEx( 'WRONG-FORMAT', "Required funcset id is not given" )
+            raise configDataKeeper._internEx( EC.WRONG_FORMAT, "Required funcset id is not given" )
 
         if 'func' in kwargs and (kwargs['func'] is None or kwargs['func']==""):
-            raise configDataKeeper._internEx( 'WRONG-FORMAT', "Required function name is not given" )
+            raise configDataKeeper._internEx( EC.WRONG_FORMAT, "Required function name is not given" )
 
         funcset_id = _safe_xpath_value(funcset_id)
         fsNodes = etree.XPath(f'//branch/deffuncsets/funcset[@id="{funcset_id}"]')(self._xmlstorage)
         if len(fsNodes)==0:
-            raise configDataKeeper._internEx( 'FUNCSET-UNKNOWN', f"Funcset {repr(funcset_id)} is unknown", bad_value=funcset_id )
+            raise configDataKeeper._internEx( EC.FUNCSET_UNKNOWN, f"Funcset {repr(funcset_id)} is unknown", bad_value=funcset_id )
 
         return fsNodes[0]
  
@@ -244,7 +349,7 @@ class configDataKeeper:
 
         funcId = _safe_xpath_value(funcId)
         if len(etree.XPath(f'func[@id="{funcId}"]')(fsNode)):
-            return configDataKeeper._internEx( "ALREADY-EXISTS", f"Function {repr(funcId)} already in {repr(funcset_id)}", bad_value=funcId ).dict4api
+            return configDataKeeper._internEx( EC.ALREADY_EXISTS, f"Function {repr(funcId)} already in {repr(funcset_id)}", bad_value=funcId ).dict4api
 
         etree.SubElement(fsNode, "func").set("id",funcId)
         self._save()
@@ -260,7 +365,7 @@ class configDataKeeper:
         funcId = _safe_xpath_value(funcId)
         funcNodes = etree.XPath(f'func[@id="{funcId}"]')(fsNode)
         if len(funcNodes)==0:
-            return configDataKeeper._internEx( "NOT-IN-SET", f"Function {repr(funcId)} is not in {repr(funcset_id)}", bad_value=funcId ).dict4api
+            return configDataKeeper._internEx( EC.NOT_IN_SET, f"Function {repr(funcId)} is not in {repr(funcset_id)}", bad_value=funcId ).dict4api
 
         fsNode.remove(funcNodes[0])
         self._save()
@@ -270,14 +375,14 @@ class configDataKeeper:
     def userBranches(self,userid):
         userid = _safe_xpath_value(userid)
         brIds = etree.XPath(f"//branch[employees/employee/@person='{userid}']/@id")(self._xmlstorage)
-        logger.info(f"Branches for user '{userid}' are {repr(brIds)}")
+        logger.debug(f"Branches for user '{userid}' are {repr(brIds)}")
         return brIds
  
     #-------------
     def userPositions(self,userid):
         userid = _safe_xpath_value(userid)
         poses = etree.XPath(f"//employee[@person='{userid}']/@pos")(self._xmlstorage)
-        logger.info(f"Positions for user '{userid}' are {repr(poses)}")
+        logger.debug(f"Positions for user '{userid}' are {repr(poses)}")
         return poses
  
     #-------------
@@ -290,7 +395,7 @@ class configDataKeeper:
     def listRoles4Branch(self,branch_id):
         branch_id = _safe_xpath_value(branch_id)
         roleNames = etree.XPath(f"//branch[@id='{branch_id}']/roles/role/@name")(self._xmlstorage)
-        logger.info(f"Roles defined in branch {repr(branch_id)} are {repr(roleNames)}")
+        logger.debug(f"Roles defined in branch {repr(branch_id)} are {repr(roleNames)}")
         return roleNames
  
     #-------------
@@ -299,12 +404,12 @@ class configDataKeeper:
         rolesnode = self._getBranchNodeS(branch_id,subpath='roles')
 
         if role_name is None or role_name=="":
-            raise configDataKeeper._internEx( 'WRONG-FORMAT', f"Required argument not given: role is {repr(role_name)}" )
+            raise configDataKeeper._internEx( EC.WRONG_FORMAT, f"Required argument not given: role is {repr(role_name)}" )
 
         role_name = _safe_xpath_value(role_name)
         roleNodes = etree.XPath(f"role[@name='{role_name}']")(rolesnode)
         if len(roleNodes)==0:
-            raise configDataKeeper._internEx( "ROLE-UNKNOWN", f"Role {role_name} not defined in branch {branch_id}" )
+            raise configDataKeeper._internEx( EC.ROLE_UNKNOWN, f"Role {role_name} not defined in branch {branch_id}" )
         return roleNodes[0]
 
     #-------------
@@ -326,7 +431,7 @@ class configDataKeeper:
             return ex.dict4api
 
         if len(etree.XPath(f"funcset[@id='{funcset_id}']")(roleNode)):
-            return configDataKeeper._internEx( "ALREADY-EXISTS", 
+            return configDataKeeper._internEx( EC.ALREADY_EXISTS, 
                                                f"Funcset {repr(funcset_id)} already in role {repr(role_name)} of {repr(branch_id)}" ).dict4api
 
         etree.SubElement(roleNode, "funcset").set("id",funcset_id)
@@ -343,7 +448,7 @@ class configDataKeeper:
 
         fsNodes = etree.XPath(f"funcset[@id='{funcset_id}']")(roleNode)
         if len(fsNodes)==0:
-            return configDataKeeper._internEx( "NOT-IN-SET", 
+            return configDataKeeper._internEx( EC.NOT_IN_SET, 
                                                f"Funcset {repr(funcset_id)} is not in role {repr(role_name)} of {repr(branch_id)}" ).dict4api
 
         roleNode.remove(fsNodes[0])
@@ -360,9 +465,9 @@ class configDataKeeper:
         ret = [ { 'id': n.get("id"),
                   'vacancies': list(etree.XPath(f"employees/employee[not(@person){spec2}]/@pos")(n)),
                 } for n in brs ]
-        logger.info(f"Branches review is {ret}")
+        logger.debug(f"Branches review is {ret}")
         return ret
- 
+
     #-------------
     def getBranches(self,pos=""):
         pos = _safe_xpath_value(pos)
@@ -372,7 +477,7 @@ class configDataKeeper:
         ret = [ { 'id': n.get("id"),
                   'value': f'{n.get("id")} - {len(list(etree.XPath(f"employees/employee[not(@person){spec2}]/@pos")(n)))} vacancies',
                 } for n in brs ]
-        logger.info(f"Branches review is {ret}")
+        logger.debug(f"Branches review is {ret}")
         return ret
  
     #-------------
@@ -398,21 +503,19 @@ class configDataKeeper:
             return ex.dict4api
 
         if sub_id is None or sub_id=="":
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Required argument not given: subbranch is {repr(sub_id)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Required argument not given: subbranch is {repr(sub_id)}").dict4api
 
         sub_id = _safe_xpath_value(sub_id)
         if len(etree.XPath(f"branch[@id='{sub_id}']")(sbrsNode)):
-            return configDataKeeper._internEx( 'ALREADY-EXISTS', f"Branch {repr(branch_id)} already has subbranch {repr(sub_id)}", bad_value=sub_id ).dict4api
+            return configDataKeeper._internEx( EC.ALREADY_EXISTS, f"Branch {repr(branch_id)} already has subbranch {repr(sub_id)}", bad_value=sub_id ).dict4api
 
-        sbrsNode.append( etree.fromstring( '''
-            <branch id="%s">
-                <func_white_list propagateParent="no"/>
-                <employees/>
-                <roles/>
-                <deffuncsets/>
-                <branches/>
-            </branch>
-            ''' % ( sub_id ), self._parser ))
+        new_branch = etree.SubElement(sbrsNode, "branch")
+        new_branch.set("id", sub_id)
+        etree.SubElement(new_branch, "func_white_list").set("propagateParent", "no")
+        etree.SubElement(new_branch, "employees")
+        etree.SubElement(new_branch, "roles")
+        etree.SubElement(new_branch, "deffuncsets")
+        etree.SubElement(new_branch, "branches")
 
         self._save()
         return {'result': True }
@@ -425,11 +528,11 @@ class configDataKeeper:
             return ex.dict4api
 
         if len(etree.XPath("ancestor::branch")(branchNode))==0:
-            return configDataKeeper._internEx( 'NOT-ALLOWED', f"Deletion of a root branch {repr(branch_id)} is not allowed", bad_value=branch_id ).dict4api
+            return configDataKeeper._internEx( EC.NOT_ALLOWED, f"Deletion of a root branch {repr(branch_id)} is not allowed", bad_value=branch_id ).dict4api
           
         emps = etree.XPath(f"descendant::employee/@person")(branchNode)
         if len(emps):
-            return configDataKeeper._internEx( 'USER-EMPLOYED', f"Branch {repr(branch_id)} still has employees: {emps}", fire_them=emps ).dict4api
+            return configDataKeeper._internEx( EC.USER_EMPLOYED, f"Branch {repr(branch_id)} still has employees: {emps}", fire_them=emps ).dict4api
 
         branchNode.getparent().remove( branchNode )
         self._save()
@@ -468,17 +571,17 @@ class configDataKeeper:
     #-------------
 
     def _getBranchNodeS(self,branch_id, subpath=None, autocreate=False):
-        if branch_id is None or branch_id=="":            raise configDataKeeper._internEx('WRONG-FORMAT',f"Required argument not given: branch is {repr(branch_id)}")
+        if branch_id is None or branch_id=="":            raise configDataKeeper._internEx(EC.WRONG_FORMAT,f"Required argument not given: branch is {repr(branch_id)}")
         branch_id = _safe_xpath_value(branch_id)
         brs=etree.XPath(f"//branch[@id='{branch_id}']")(self._xmlstorage)
         if len(brs)==0:
-            raise configDataKeeper._internEx( 'BRANCH-UNKNOWN', f"Branch {repr(branch_id)} is unknown", bad_value=branch_id )
+            raise configDataKeeper._internEx( EC.BRANCH_UNKNOWN, f"Branch {repr(branch_id)} is unknown", bad_value=branch_id )
         if subpath is None:
            return brs[0]
         subs=etree.XPath(subpath)(brs[0])
         if len(subs)==0:
             if not autocreate:
-                raise configDataKeeper._internEx( 'DATABASE-ERROR', f"Inconsistent server data: branch {repr(branch_id)} description has no sub-path {repr(subpath)}", inconsistence=subpath )
+                raise configDataKeeper._internEx( EC.DATABASE_ERROR, f"Inconsistent server data: branch {repr(branch_id)} description has no sub-path {repr(subpath)}", inconsistence=subpath )
             return etree.SubElement(brs[0],subpath)
         return subs[0]
  
@@ -499,7 +602,7 @@ class configDataKeeper:
                   'branch':n.getparent().getparent().get("id"),
                   'vacant': not "person" in n.attrib
                 } for n in eNodes ]
-        logger.info(f"Positions review is {ret}")
+        logger.debug(f"Positions review is {ret}")
         return ret
 
     #-------------
@@ -511,7 +614,7 @@ class configDataKeeper:
         ret = [ { 'id':n.get("pos"),
                   'value':f"{n.get('pos')} at {n.getparent().getparent().get('id')} {'VACANT' if not 'person' in n.attrib else 'OCCUPIED'}",
                 } for n in eNodes ]
-        logger.info(f"Positions review is {ret}")
+        logger.debug(f"Positions review is {ret}")
         return ret
 
     #-------------
@@ -546,29 +649,29 @@ class configDataKeeper:
 
         branch_id = branchNode.get('id')
         if branch_id is None: # not a branch
-            logger.info(f"_collectBranchFuncsets - non-branch node achieved")
+            logger.debug(f"_collectBranchFuncsets - non-branch node achieved")
             return set()
 
         defined_here = set( etree.XPath("deffuncsets/funcset/@id")(branchNode) )
-        logger.info(f"_collectBranchFuncsets for {repr(branch_id)}: Funcsets defined locally: {defined_here}")
+        logger.debug(f"_collectBranchFuncsets for {repr(branch_id)}: Funcsets defined locally: {defined_here}")
 
         wlNodes = etree.XPath("func_white_list")(branchNode)
         ancBranches = etree.XPath("ancestor::branch")(branchNode)
-        if len(wlNodes)==0 or len(ancBranches)==0: 
-            logger.info(f"_collectBranchFuncsets for {repr(branch_id)}: Nothing to take from parent")
+        if len(wlNodes)==0 or len(ancBranches)==0:
+            logger.debug(f"_collectBranchFuncsets for {repr(branch_id)}: Nothing to take from parent")
             return defined_here
 
         parent_funcsets = self._collectBranchFuncsets(ancBranches[-1])
 
         if wlNodes[0].get("propagateParent","no")=="yes":
-            logger.info(f"_collectBranchFuncsets for {repr(branch_id)}: - Propagating parent funcsets {parent_funcsets} as is")
+            logger.debug(f"_collectBranchFuncsets for {repr(branch_id)}: - Propagating parent funcsets {parent_funcsets} as is")
             ret = defined_here | parent_funcsets
         else:
             wl = set( etree.XPath("funcset/@id")(wlNodes[0]) )
-            logger.info(f"_collectBranchFuncsets for {repr(branch_id)}: - Intersecting parent funcsets {parent_funcsets} with whitelist {wl}")
+            logger.debug(f"_collectBranchFuncsets for {repr(branch_id)}: - Intersecting parent funcsets {parent_funcsets} with whitelist {wl}")
             ret = defined_here | (parent_funcsets & wl)
 
-        logger.info(f"_collectBranchFuncsets for {repr(branch_id)}: - final result is {ret}")
+        logger.debug(f"_collectBranchFuncsets for {repr(branch_id)}: - final result is {ret}")
         return ret
 
     #-------------
@@ -581,7 +684,7 @@ class configDataKeeper:
             return None
         else:
             # taking the last element to get the closest to our node definiton, because XPath returns info in "documented" order
-            logger.info(f"Taking definition for {repr(pos)} from {repr(roleNodes[-1].getparent().getparent().get('id'))} (closest of {len(roleNodes)} to {repr(branchNode.get('id'))})")
+            logger.debug(f"Taking definition for {repr(pos)} from {repr(roleNodes[-1].getparent().getparent().get('id'))} (closest of {len(roleNodes)} to {repr(branchNode.get('id'))})")
             return roleNodes[-1]
          
 
@@ -621,7 +724,7 @@ class configDataKeeper:
         role = _safe_xpath_value(role)
         posNodes = etree.XPath(f"employee[@pos='{role}' and not(@person)]")(empsNode)
         if len(posNodes)==0:
-            return configDataKeeper._internEx( "NOT-IN-SET", f"Branch {repr(branch)} has no vacant {repr(role)} positions" ).dict4api
+            return configDataKeeper._internEx( EC.NOT_IN_SET, f"Branch {repr(branch)} has no vacant {repr(role)} positions" ).dict4api
 
         empsNode.remove(posNodes[-1])
         self._save()
@@ -649,7 +752,7 @@ class configDataKeeper:
             branch = empNodes[0].getparent().getparent()
 
             whitelist = self._collectBranchFuncsets(branch) # returns set
-            logger.info(f"Collected whitelist for branch '{branch.get('id')}' is {whitelist}")
+            logger.debug(f"Collected whitelist for branch '{branch.get('id')}' is {whitelist}")
             
             pos = empNodes[0].get("pos")
             roleNode = self._findRoleNode(pos,branch) # search role definition in branch of upper
@@ -659,7 +762,7 @@ class configDataKeeper:
             else:
                 funcsets4role = set( etree.XPath("funcset/@id")(roleNode) )
                 ret = whitelist & funcsets4role
-                logger.info(f"Whitelist for '{userid}' is {whitelist}, role funcset for pos '{pos}' is {funcsets4role}, intersection is {ret}")
+                logger.debug(f"Whitelist for '{userid}' is {whitelist}, role funcset for pos '{pos}' is {funcsets4role}, intersection is {ret}")
                 return list(ret)
 
     #-------------
@@ -698,7 +801,7 @@ class configDataKeeper:
 
         role_name = _safe_xpath_value(role_name)
         if len(etree.XPath(f"role[@name='{role_name}']")(rolesNode))>0:
-            return configDataKeeper._internEx( 'ALREADY-EXISTS', f"Role {repr(role_name)} already defined in branch {repr(branch_id)}", bad_value=role_name ).dict4api
+            return configDataKeeper._internEx( EC.ALREADY_EXISTS, f"Role {repr(role_name)} already defined in branch {repr(branch_id)}", bad_value=role_name ).dict4api
 
         roleNode = etree.SubElement(rolesNode,"role")
         roleNode.set("name",role_name)
@@ -719,7 +822,7 @@ class configDataKeeper:
         role_name = _safe_xpath_value(role_name)
         roleNodes = etree.XPath(f"role[@name='{role_name}']")(rolesNode)
         if len(roleNodes)==0:
-            return configDataKeeper._internEx( 'ROLE-UNKNOWN', f"Role {repr(role_name)} has no direct definition in branch {repr(branch_id)}", bad_value=role_name ).dict4api
+            return configDataKeeper._internEx( EC.ROLE_UNKNOWN, f"Role {repr(role_name)} has no direct definition in branch {repr(branch_id)}", bad_value=role_name ).dict4api
 
         rolesNode.remove( roleNodes[0] )
         self._save()
@@ -739,7 +842,7 @@ class configDataKeeper:
         #self._check_operator(operator_id)
         opnode = self._getUserNode(operator_id)
         if opnode is None:
-            raise configDataKeeper._internEx( 'OP-UNKNOWN', f"Operator {repr(operator_id)} is unknown to the system" )
+            raise configDataKeeper._internEx( EC.OP_UNKNOWN, f"Operator {repr(operator_id)} is unknown to the system" )
         return opnode
 
     #-------------
@@ -748,7 +851,7 @@ class configDataKeeper:
         operator_id = _safe_xpath_value(operator_id)
         opbranches = etree.XPath(f"//branch[employees/employee/@person='{operator_id}']")(self._xmlstorage)
         if len(opbranches)==0:
-            raise configDataKeeper._internEx( 'FORBIDDEN-FOR-OP', f"Operator {repr(operator_id)} is nowhere employed " )
+            raise configDataKeeper._internEx( EC.FORBIDDEN_FOR_OP, f"Operator {repr(operator_id)} is nowhere employed " )
         return opbranches[0]
                                                 
     #-------------
@@ -756,10 +859,10 @@ class configDataKeeper:
     def createUser(self,userid,secret,operator,pswlifetime=None,readablename="",sessionmax=None):
 
         if userid is None or secret is None or operator is None:
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Not all required parameters are given: user id:{repr(userid)}, secret:{repr(secret)}, operator:{repr(operator)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Not all required parameters are given: user id:{repr(userid)}, secret:{repr(secret)}, operator:{repr(operator)}").dict4api
 
         if not self._getUserNode(userid) is None:
-            return configDataKeeper._internEx('ALREADY-EXISTS',f"User '{userid}' already exists").dict4api
+            return configDataKeeper._internEx(EC.ALREADY_EXISTS,f"User '{userid}' already exists").dict4api
 
         try:
             self._get_operatorS_node(operator)
@@ -795,11 +898,11 @@ class configDataKeeper:
     def changeUser(self,userid,secret,operator,pswlifetime=None,readablename="",sessionmax=None):
 
         if userid is None or secret is None or operator is None:
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Not all required parameters are given: user id:{repr(userid)}, secret:{repr(secret)}, operator:{repr(operator)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Not all required parameters are given: user id:{repr(userid)}, secret:{repr(secret)}, operator:{repr(operator)}").dict4api
 
         unode = self._getUserNode(userid)
         if unode is None:
-            return configDataKeeper._internEx('USER-UNKNOWN',f"User {repr(userid)} is unknown").dict4api
+            return configDataKeeper._internEx(EC.USER_UNKNOWN,f"User {repr(userid)} is unknown").dict4api
 
         try:
             self._get_operatorS_node(operator)
@@ -807,7 +910,7 @@ class configDataKeeper:
             return ex.dict4api
 
         #if operator != userid:
-        #    return configDataKeeper._internEx('FORBIDDEN-FOR-OP',"Password change is allowed only for user himself").dict4api
+        #    return configDataKeeper._internEx(EC.FORBIDDEN_FOR_OP,"Password change is allowed only for user himself").dict4api
 
         logger.info(f"Changing registration data for user '{userid}'")
         pswTime=int(time.time())
@@ -843,15 +946,15 @@ class configDataKeeper:
             return ex.dict4api
 
         if userid is None:
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Not all required parameters are given: user id is {repr(userid)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Not all required parameters are given: user id is {repr(userid)}").dict4api
 
         unode = self._getUserNode(userid)
         if unode is None:
-            return configDataKeeper._internEx('USER-UNKNOWN',f"User {repr(userid)} is unknown").dict4api
+            return configDataKeeper._internEx(EC.USER_UNKNOWN,f"User {repr(userid)} is unknown").dict4api
 
         branches = self.userBranches(userid)
         if len(branches)!=0: 
-            return configDataKeeper._internEx('USER-EMPLOYED',f"User '{userid}' is employed, fire him first").dict4api
+            return configDataKeeper._internEx(EC.USER_EMPLOYED,f"User '{userid}' is employed, fire him first").dict4api
 
         logger.info(f"Deleting user '{userid}'")
         unode.getparent().remove(unode)
@@ -866,7 +969,7 @@ class configDataKeeper:
         userid = _safe_xpath_value(userid)
         empNodes = etree.XPath(f"descendant-or-self::employee[@person='{userid}']") (opbranch)
         if len(empNodes)==0:
-            raise configDataKeeper._internEx('FORBIDDEN-FOR-OP',f"User {repr(userid)} is not accountable to operator {repr(operator)}")
+            raise configDataKeeper._internEx(EC.FORBIDDEN_FOR_OP,f"User {repr(userid)} is not accountable to operator {repr(operator)}")
         return empNodes[0]
       
     #-------------
@@ -874,14 +977,14 @@ class configDataKeeper:
     def fireEmployee(self,userid, operator):
 
         if userid is None:
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Not all required parameters are given: user id is {repr(userid)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Not all required parameters are given: user id is {repr(userid)}").dict4api
                           
         if self._getUserNode(userid) is None:
-            return configDataKeeper._internEx('USER-UNKNOWN',f"User {repr(userid)} is unknown").dict4api
+            return configDataKeeper._internEx(EC.USER_UNKNOWN,f"User {repr(userid)} is unknown").dict4api
 
         branches = self.userBranches(userid)
         if len(branches)==0: 
-            return configDataKeeper._internEx('ALREADY-UNEMPLOYED',f"User '{userid}' already unemployed").dict4api
+            return configDataKeeper._internEx(EC.ALREADY_UNEMPLOYED,f"User '{userid}' already unemployed").dict4api
         branch = branches[0]
  
         try:
@@ -904,7 +1007,7 @@ class configDataKeeper:
         branch = _safe_xpath_value(branch)
         brNodes = etree.XPath(f"descendant-or-self::branch[@id='{branch}']") (opbranch)
         if len(brNodes)==0:
-            raise configDataKeeper._internEx('FORBIDDEN-FOR-OP',f"Branch {repr(branch)} is not accountable to operator {repr(operator)}")
+            raise configDataKeeper._internEx(EC.FORBIDDEN_FOR_OP,f"Branch {repr(branch)} is not accountable to operator {repr(operator)}")
         return brNodes[0]
       
     #-------------
@@ -912,25 +1015,25 @@ class configDataKeeper:
     def hireEmployee(self,userid,branch,pos, operator):
 
         if any(x is None or x=="" for x in (userid,branch,pos)):
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Not all required parameters are given: user id is {repr(userid)}, branch is {repr(branch)}, pos is {repr(pos)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Not all required parameters are given: user id is {repr(userid)}, branch is {repr(branch)}, pos is {repr(pos)}").dict4api
 
         if self._getUserNode(userid) is None:
-            return configDataKeeper._internEx('USER-UNKNOWN',f"User {repr(userid)} is unknown").dict4api
+            return configDataKeeper._internEx(EC.USER_UNKNOWN,f"User {repr(userid)} is unknown").dict4api
 
         branches = self.userBranches(userid)
         if len(branches)!=0: 
-            return configDataKeeper._internEx('ALREADY-EMPLOYED',f"User '{userid}' already employed at {branches}").dict4api
+            return configDataKeeper._internEx(EC.ALREADY_EMPLOYED,f"User '{userid}' already employed at {branches}").dict4api
 
         branch = _safe_xpath_value(branch)
         pos = _safe_xpath_value(pos)
         branchNodes = etree.XPath(f"//branch[@id='{branch}']")(self._xmlstorage)
         if len(branchNodes)==0:
-            return configDataKeeper._internEx('BRANCH-UNKNOWN',f"Branch '{branch}' does not exist").dict4api
+            return configDataKeeper._internEx(EC.BRANCH_UNKNOWN,f"Branch '{branch}' does not exist").dict4api
 
         empNodes = etree.XPath(f"employees/employee[@pos='{pos}' and not(@person)]")(branchNodes[0])
-        logger.info(f"We have {len(empNodes)} vacant positions for '{pos}' in '{branch}'")
+        logger.debug(f"We have {len(empNodes)} vacant positions for '{pos}' in '{branch}'")
         if len(empNodes)==0: 
-            return configDataKeeper._internEx('NO-VACANT-POSITIONS',f"No vacant positions for '{pos}' in '{branch}'").dict4api
+            return configDataKeeper._internEx(EC.NO_VACANT_POS,f"No vacant positions for '{pos}' in '{branch}'").dict4api
 
         try:
            self._get_brNode_relOp(operator,branch)
@@ -949,13 +1052,13 @@ class configDataKeeper:
         userid = _safe_xpath_value(userid)
         if self._getUserNode(userid) is None:
             logger.warning(f"User '{userid}' is unknown")
-            return { 'result': False, 'reason':'USER-UNKNOWN'}
+            return { 'result': False, 'reason':EC.USER_UNKNOWN}
         else:
             axe = 'descendant' if allLevels else 'child'
             brIds = set(etree.XPath(f"//branch[employees/employee/@person='{userid}']/branches/{axe}::branch/@id")(self._xmlstorage))
             if not excludeOwn:
                 brIds |= set(etree.XPath(f"//employee[@person='{userid}']/../../@id")(self._xmlstorage))
-            logger.info(f"Sub-branches for user '{userid}' are {repr(brIds)}")
+            logger.debug(f"Sub-branches for user '{userid}' are {repr(brIds)}")
             return { 'result': True, 
                      'subbranches': list(brIds), 
                    }
@@ -964,7 +1067,7 @@ class configDataKeeper:
     def empFuncsetsList(self,userid):
         if self._getUserNode(userid) is None:
             logger.warning(f"User '{userid}' is unknown")
-            return { 'result': False, 'reason':'USER-UNKNOWN'}
+            return { 'result': False, 'reason':EC.USER_UNKNOWN}
         else:
             return { 'result': True, 
                      'funcsets': self._userFuncSets(userid)
@@ -978,7 +1081,7 @@ class configDataKeeper:
             funcsAllowed |= set(etree.XPath(f"//funcset[@id='{x}']/func/@id")(self._xmlstorage))
         funcsKnown = set( self.listFunctions("id")["values"] )
         funcs = funcsAllowed & funcsKnown
-        logger.info(f"Functions for {userid} are {funcs} as an intersectoin of allowed {funcsAllowed} and known {funcsKnown}")
+        logger.debug(f"Functions for {userid} are {funcs} as an intersection of allowed {funcsAllowed} and known {funcsKnown}")
         return funcs
 
     #-------------
@@ -986,7 +1089,7 @@ class configDataKeeper:
     def empFunctionsList(self,userid, prop="id"):
         if self._getUserNode(userid) is None:
             logger.warning(f"User '{userid}' is unknown")
-            return { 'result': False, 'reason':'USER-UNKNOWN'}
+            return { 'result': False, 'reason':EC.USER_UNKNOWN}
         else:
             funcs = self.__empFunctionIds(userid)
             return { 'result': True, 
@@ -999,7 +1102,7 @@ class configDataKeeper:
     def empFunctionsReview(self,userid, props):
         if self._getUserNode(userid) is None:
             logger.warning(f"User '{userid}' is unknown")
-            return { 'result': False, 'reason':'USER-UNKNOWN'}
+            return { 'result': False, 'reason':EC.USER_UNKNOWN}
         else:
             funcs = self.__empFunctionIds(userid)
             return { 'result': True, 
@@ -1013,7 +1116,7 @@ class configDataKeeper:
         branchNodes = etree.XPath(f"//branch[@id='{branchId}']")(self._xmlstorage)
         if len(branchNodes)==0:
             logger.warning(f"Branch '{branchId}' is unknown")
-            return { 'result': False, 'reason':'BRANCH-UNKNOWN'}
+            return { 'result': False, 'reason':EC.BRANCH_UNKNOWN}
         else:
             return { 'result': True, 
                      'employees': etree.XPath( "descendant-or-self::employee/@person" if includeSubBranches else "employees/employee/@person"
@@ -1039,12 +1142,12 @@ class configDataKeeper:
 
         if not prop in configDataKeeper._fpHow.keys():
             logger.error(f"Property {repr(prop)} is unknown")
-            return { 'result': False, 'reason':'WRONG-FORMAT' }
+            return { 'result': False, 'reason':EC.WRONG_FORMAT }
 
         #catsTree = self._getCatalogues()
         rets = etree.XPath( "/catalogues/functions_catalogue/function/"+configDataKeeper._fpHow[prop][0] )(self._xmlcats)
 
-        logger.info(f"Property {repr(prop)} values for known functions are: {rets}")
+        logger.debug(f"Property {repr(prop)} values for known functions are: {rets}")
 
         return { 'result': True, 
                  'property': prop,
@@ -1058,7 +1161,7 @@ class configDataKeeper:
 
         propl = props.split(",")
         if not all(prop in configDataKeeper._fpHow.keys() for prop in propl):
-            return configDataKeeper._internEx('WRONG-FORMAT',f"One or more of properties in {repr(propl)} are unknown").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"One or more of properties in {repr(propl)} are unknown").dict4api
 
         #catsTree = self._getCatalogues()
         if function_id is not None:
@@ -1066,7 +1169,7 @@ class configDataKeeper:
         funcnodes = etree.XPath( "/catalogues/functions_catalogue/function" + ("" if function_id is None else f"[@id='{function_id}']") )(self._xmlcats)
 
         if len(funcnodes)==0 and not function_id is None:
-            return configDataKeeper._internEx('FUNCTION-UNKNOWN',f"Function {function_id} is not described in catalogue").dict4api
+            return configDataKeeper._internEx(EC.FUNCTION_UNKNOWN,f"Function {function_id} is not described in catalogue").dict4api
 
         resGen = ( dict( ( p,
                            configDataKeeper._fpHow[p][1](etree.XPath(configDataKeeper._fpHow[p][0])(f)[0])
@@ -1086,7 +1189,7 @@ class configDataKeeper:
         funcNodes = etree.XPath(f"/catalogues/functions_catalogue/function[@id='{funcId}']")(self._xmlcats)
         if len(funcNodes)==0:
             logger.warning(f"Function '{funcId}' is unknown")
-            return { 'result': False, 'reason':'FUNCTION-UNKNOWN'}
+            return { 'result': False, 'reason':EC.FUNCTION_UNKNOWN}
         else:
             fDef = header + etree.tostring(funcNodes[0], pretty_print=True, encoding='unicode')            
             if pureXml:
@@ -1104,11 +1207,11 @@ class configDataKeeper:
             newFuncTree = etree.fromstring(funcDescrText, parser=self._parser)
         except Exception as err:
             logger.error(f"Cannot parse new function description as XML, error {str(type(err))}, details:\n  {repr(err)}.")
-            return { 'result': False, 'reason':'WRONG-DATA', 'details':repr(err) }
+            return { 'result': False, 'reason':EC.WRONG_DATA, 'details':repr(err) }
 
         funcId = newFuncTree.get("id",None)
         if funcId is None:
-            return { 'result': False, 'reason':'WRONG-DATA', 'details':'Function does not have "id" attribute' }
+            return { 'result': False, 'reason':EC.WRONG_DATA, 'details':'Function does not have "id" attribute' }
 
         funcId = _safe_xpath_value(funcId)
         funcsCat = etree.XPath(f"/catalogues/functions_catalogue")(self._xmlcats)[0]
@@ -1132,7 +1235,7 @@ class configDataKeeper:
     def deleteFunctionDef(self,funcId):
 
         if funcId is None:
-            return { 'result': False, 'reason':'WRONG-FORMAT' }
+            return { 'result': False, 'reason':EC.WRONG_FORMAT }
 
         funcId = _safe_xpath_value(funcId)
         funcsCat = etree.XPath(f"/catalogues/functions_catalogue")(self._xmlcats)[0]
@@ -1140,7 +1243,7 @@ class configDataKeeper:
 
         if len(funcNodes)==0:
             logger.warning(f"Function '{funcId}' is unknown")
-            return { 'result': False, 'reason':'FUNCTION-UNKNOWN'}
+            return { 'result': False, 'reason':EC.FUNCTION_UNKNOWN}
 
         logger.info(f"Function '{funcId}' to be deleted")
         oldTxt = etree.tostring(funcNodes[0], pretty_print=True, encoding='unicode')
@@ -1153,11 +1256,11 @@ class configDataKeeper:
     def modifyFuncTagset(self, funcId, method, tagset, read_only=False):
 
         if any(x is None or x=="" for x in (funcId,method)):
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Required parameter not given: funcId {repr(funcId)}, method {repr(method)}").dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Required parameter not given: funcId {repr(funcId)}, method {repr(method)}").dict4api
         funcId = _safe_xpath_value(funcId)
         funcNodes = etree.XPath(f"/catalogues/functions_catalogue/function[@id='{funcId}']")(self._xmlcats)
         if len(funcNodes)==0:
-            return configDataKeeper._internEx('FUNCTION-UNKNOWN',f"Function {repr(funcId)} is unknown").dict4api
+            return configDataKeeper._internEx(EC.FUNCTION_UNKNOWN,f"Function {repr(funcId)} is unknown").dict4api
 
         old_tagset = set(funcNodes[0].get("tags","").split(","))
 
@@ -1170,7 +1273,7 @@ class configDataKeeper:
         elif method=='MINUS':
             new_tagset = old_tagset - tagset
         else:
-            return configDataKeeper._internEx('WRONG-FORMAT',f"Method {repr(method)} is unapplicable",wrong_value=method).dict4api
+            return configDataKeeper._internEx(EC.WRONG_FORMAT,f"Method {repr(method)} is unapplicable",wrong_value=method).dict4api
 
         retTs = ",".join(new_tagset)
         if not read_only:
@@ -1187,10 +1290,10 @@ class configDataKeeper:
     def getSubBranchesOfAgent(self,agentid):
 
         branch_id = self._agents_keeper.get_branch_name(agentid)
-        logger.info(f"requested subbranches of owner of agent {repr(agentid)} that is {repr(branch_id)}")
+        logger.debug(f"requested subbranches of owner of agent {repr(agentid)} that is {repr(branch_id)}")
         branch_id = _safe_xpath_value(branch_id)
         ret =  etree.XPath(f"//branch[@id='{branch_id}']/descendant-or-self::branch/@id")(self._xmlstorage)
-        logger.info(f"result is {repr(ret)} with length {len(ret)}")
+        logger.debug(f"result is {repr(ret)} with length {len(ret)}")
         return ret
 
     #-------------
@@ -1208,24 +1311,24 @@ class configDataKeeper:
         if not move:
 
             if not current is None:
-                return configDataKeeper._internEx( 'ALREADY-EXISTS', f"Agent {repr(agent_id)} already registered in branch {repr(current['branch'])}", bad_value=agent_id ).dict4api
+                return configDataKeeper._internEx( EC.ALREADY_EXISTS, f"Agent {repr(agent_id)} already registered in branch {repr(current['branch'])}", bad_value=agent_id ).dict4api
 
             try:
                 etree.fromstring( f'<extra>{extraxml}</extra>')
             except Exception as ex:
-                return configDataKeeper._internEx('WRONG-FORMAT',f"extraxml field does not fit into XML format, details: {repr(ex)}").dict4api
+                return configDataKeeper._internEx(EC.WRONG_FORMAT,f"extraxml field does not fit into XML format, details: {repr(ex)}").dict4api
 
 
         else:
 
             if current is None:
-                return configDataKeeper._internEx( 'AGENT-UNKNOWN', f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
+                return configDataKeeper._internEx( EC.AGENT_UNKNOWN, f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
             curr_br_name = _safe_xpath_value(current['branch'])
             curr_branch_nodes = etree.XPath( f"//branch[@id='{curr_br_name}']" )(self._xmlstorage)
             if len(curr_branch_nodes)==0:
-                return configDataKeeper._internEx( 'DATABASE-ERROR', f"Branch {repr(curr_br_name)} referenced from agent {repr(agent_id)} does not longer exist" ).dict4api
+                return configDataKeeper._internEx( EC.DATABASE_ERROR, f"Branch {repr(curr_br_name)} referenced from agent {repr(agent_id)} does not longer exist" ).dict4api
             if len(etree.XPath(f"descendant-or-self::branch[@id='{branch_id}']")(curr_branch_nodes[0]))!=1:
-                return configDataKeeper._internEx( 'NOT-IN-SET', f"Branch {repr(branch_id)} is not a subsidiary of a branch {repr(curr_br_name)} containing agent {repr(agent_id)}", bad_value=branch_id ).dict4api
+                return configDataKeeper._internEx( EC.NOT_IN_SET, f"Branch {repr(branch_id)} is not a subsidiary of a branch {repr(curr_br_name)} containing agent {repr(agent_id)}", bad_value=branch_id ).dict4api
 
             self.unregisterAgent(agent_id )
 
@@ -1236,7 +1339,7 @@ class configDataKeeper:
     def unregisterAgent(self, agent_id ):
 
         if not self._agents_keeper.delete_agent(agent_id):
-           return configDataKeeper._internEx( 'AGENT-UNKNOWN', f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
+           return configDataKeeper._internEx( EC.AGENT_UNKNOWN, f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
 
         return {'result': True }
  
@@ -1246,7 +1349,7 @@ class configDataKeeper:
 
         agdict = self._agents_keeper.get_agent_dict(agent_id, with_tags=True)
         if agdict is None:
-            return configDataKeeper._internEx( 'AGENT-UNKNOWN', f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
+            return configDataKeeper._internEx( EC.AGENT_UNKNOWN, f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
 
         agent_element = etree.Element("aginfo")
         etree.SubElement(agent_element, "descr").text = str(agdict['descr'])
@@ -1263,7 +1366,7 @@ class configDataKeeper:
 
         agdict = self._agents_keeper.get_agent_dict(agent_id, with_tags=True)
         if agdict is None:
-            return configDataKeeper._internEx( 'AGENT-UNKNOWN', f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
+            return configDataKeeper._internEx( EC.AGENT_UNKNOWN, f"Agent {repr(agent_id)} is never registered", bad_value=agent_id ).dict4api
         
         return { 'result': True, 
                  'details': {

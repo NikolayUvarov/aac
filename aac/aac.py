@@ -20,6 +20,8 @@ logger = logging.getLogger("aac")
 #----------------------------------------------------------------------------
 
 from dataKeeper import configDataKeeper
+import error_codes as EC
+from error_codes import REASON_TO_HTTP
 storage = None # to be set in main by configDataKeeper
 
 #----------------------------------------------------------------------------
@@ -64,39 +66,32 @@ def aac_rq_handler(afunc):
         logger.info(f"Request is {fwrk.request}, content type {repr(fwrk.request.content_type)}")
         logger.debug( "Request cookies: " + ",".join( f"{x}:{repr(fwrk.request.cookies[x])}" for x in fwrk.request.cookies ) )
 
-        logRet,ret = await afunc(*args, **kwargs)
+        # Allow clients to request immediate disk flush via header or query param
+        flush_now = (fwrk.request.headers.get("X-Flush-Now", "").lower() in ("1", "true", "yes")
+                     or fwrk.request.args.get("flush", "").lower() in ("1", "true", "yes"))
+        if flush_now:
+            storage.set_flush_now()
+
+        try:
+            logRet, ret = await afunc(*args, **kwargs)
+        except ValueError as exc:
+            logger.warning(f"Validation error: {exc}")
+            return add_respcode_by_reason({'result': False, 'reason': EC.WRONG_FORMAT, 'warning': str(exc)})
 
         if logRet:
             logger.info(f"Result is {ret}")
+
+        # If client requested an immediate flush, honour it after the handler finishes
+        if flush_now and storage is not None:
+            storage.flush_if_dirty()
+
         return ret
     return wrapped
 
 #----------------------------------------------------------------------------
 
 def add_respcode_by_reason( some_dict ):
-    rspCode = { 
-                "WRONG-FORMAT"       :400,
-                "WRONG-DATA"         :400,
-                "USER-UNKNOWN"       :401, # user is a special case - returning "Unathorized"
-                "WRONG-SECRET"       :403,
-                "SECRET-EXPIRED"     :403,
-                "ALREADY-EXISTS"     :403,
-                "USER-EMPLOYED"      :403,
-                "ALREADY-UNEMPLOYED" :403,                
-                "FUNCTION-UNKNOWN"   :404, # for the most of "unknown" cases returning "Not found" 
-                "FUNCSET-UNKNOWN"    :404,
-                "ROLE-UNKNOWN"       :404,
-                "PROP-UNKNOWN"       :404,
-                "BRANCH-UNKNOWN"     :404,
-                "AGENT-UNKNOWN"      :404,
-                "NOT-IN-SET"         :404,
-                "NOT-ALLOWED"        :405,
-                "DATABASE-ERROR"     :500,
-                "OP-UNAUTHORIZED"    :401, # operator needs to login
-                "OPERATOR-UNKNOWN"   :401, # may happen if operator was removed from database while his authorization still active
-                "FORBIDDEN-FOR-OP"   :403, 
-
-              }.get(some_dict.get("reason",None),200)
+    rspCode = REASON_TO_HTTP.get(some_dict.get("reason", None), 200)
     return (some_dict, rspCode, {'Content-Type':'application/json; charset=utf-8'})
 
 #----------------------------------------------------------------------------
@@ -479,7 +474,7 @@ async def funcUpXmlFile():
     spooled_temp_file = files.get("xmlfile",default=None)
     if spooled_temp_file is None:
         logger.error(f"Required file field 'xmlfile' is not found in POST request body")
-        return ( True, add_respcode_by_reason( {'result':False, 'reason':'WRONG-FORMAT'} ))
+        return ( True, add_respcode_by_reason( {'result':False, 'reason':EC.WRONG_FORMAT} ))
 
     txt = spooled_temp_file.read().decode('utf-8')
 
@@ -1019,14 +1014,14 @@ def after_request(response):
    
     #logger.debug(f"!@#$$$ Request headers are {repr(fwrk.request.headers)}")
     origin = fwrk.request.headers.get('Origin',None)
-    logger.info(f"Post-processing response to request from origin {repr(origin)}")
+    logger.debug(f"Post-processing response to request from origin {repr(origin)}")
 
     if origin is None:
-        logger.info(f"Doing none with request from None origin")
+        logger.debug(f"Doing none with request from None origin")
     else:
         global _aac_cors_whitelist
         if origin in _aac_cors_whitelist:
-            logger.info(f"Welcomed request from whitelisted origin {repr(origin)}!")
+            logger.debug(f"Welcomed request from whitelisted origin {repr(origin)}!")
             logger.debug(f"Initially response headers were {repr(response.headers)}")
 
             response.headers['Access-Control-Allow-Origin'] = fwrk.request.headers['Origin'] 
@@ -1034,7 +1029,7 @@ def after_request(response):
 
             logger.debug(f"And now response headers are {repr(response.headers)}")
         else:
-            logger.info(f"Request from a non-whitelisted origin {repr(origin)} - leaving headers as is")
+            logger.debug(f"Request from a non-whitelisted origin {repr(origin)} - leaving headers as is")
 
     return response
 
@@ -1071,11 +1066,14 @@ async def main():
 
 
     # and running server:
-    await app.run_task(
-        host='0.0.0.0',
-        port= cfgDict["run_locations"][runAt]["port"],
-        debug=cfgDict.get("debug", False),
-        )
+    try:
+        await app.run_task(
+            host='0.0.0.0',
+            port= cfgDict["run_locations"][runAt]["port"],
+            debug=cfgDict.get("debug", False),
+            )
+    finally:
+        storage.shutdown()
 
     logger.info('aac exited')
 
