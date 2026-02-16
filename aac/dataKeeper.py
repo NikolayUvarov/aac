@@ -989,9 +989,17 @@ class configDataKeeper:
             return { 'result': False, 'reason':'USER-UNKNOWN'}
         else:
             funcs = self.__empFunctionIds(userid)
+            values = set()
+            for f in funcs:
+                info = self.reviewFunctions(prop, function_id=f)
+                if not info.get("result"):
+                    continue
+                value = info.get("props", {}).get(prop)
+                if value not in (None, ""):
+                    values.add(value)
             return { 'result': True, 
                      'prop' : prop,
-                     'functions': list(set( self.reviewFunctions(prop,function_id=f)["props"][prop] for f in funcs )),
+                     'functions': list(values),
                    }
 
     #-------------
@@ -1004,7 +1012,7 @@ class configDataKeeper:
             funcs = self.__empFunctionIds(userid)
             return { 'result': True, 
                      'props' : props,
-                     'functions': [ self.reviewFunctions(props,function_id=f)["props"] for f in funcs ],
+                     'functions': [ rec["props"] for rec in (self.reviewFunctions(props,function_id=f) for f in funcs) if rec.get("result") and isinstance(rec.get("props"),dict) ],
                    }
 
     #-------------
@@ -1322,4 +1330,3 @@ if __name__ == '__main__':
         test._save()
 
     main()
-

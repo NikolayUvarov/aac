@@ -1298,8 +1298,8 @@ func main() {
 
 	route(mux, "/", handleRouteRoot)
 	route(mux, "/index.html", handleRouteRoot)
-	route(mux, "/aac", handleAacRoot)
 	route(mux, "/aac/", handleAacRoot)
+	route(mux, "/aac", handleAacRoot)
 	route(mux, "/aac/static/index.html", handleRouteRoot)
 	mux.Handle("/aac/static/", withCORS(http.StripPrefix("/aac/static/", fileServer)))
 

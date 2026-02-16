@@ -47,6 +47,7 @@ defmodule AacWeb.Router do
     get "/function/upload/xmldescr", FunctionController, :upload_xml_descr
     post "/function/upload/xmlfile", FunctionController, :upload_xml_file
     get "/function/upload/xmlfile", FunctionController, :upload_xml_file
+    get "/function/tagset/modify", FunctionController, :tagset_modify
     post "/function/tagset/modify", FunctionController, :tagset_modify
     get "/function/tagset/test", FunctionController, :tagset_test
 

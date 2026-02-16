@@ -48,6 +48,7 @@ def hashString2Hex(input):
 
 @app.route('/')
 @app.route('/index.html')
+@app.route('/aac')
 @app.route('/aac/')
 @app.route('/aac/static/index.html')
 async def index():
@@ -214,11 +215,15 @@ async def functions_list():
 async def functions_review():
 
     props = fwrk.request.args.get("props",default=None)
-    function_id = None if fwrk.request.path=="/aac/functions/review" else fwrk.request.args.get("funcId",-1)
+    if fwrk.request.path == "/aac/functions/review":
+        # Behaviour matches Go/Elixir: this path is used as a "list" variant.
+        return (True, {'result': True})
 
-    if props is None or function_id==-1:
+    function_id = fwrk.request.args.get("funcId",default=None)
+
+    if props is None or function_id in (None, ""):
         return (False, await fwrk.render_template( 'form4_funcprops.jinja',
-                                                   **({ 'funcList': storage.listFunctions("id")["values"]} if fwrk.request.path=="/aac/function/review" else {})
+                                                   funcList = storage.listFunctions("id")["values"]
                                                  ) )
 
     return (True,  add_respcode_by_reason(storage.reviewFunctions(props,function_id)) )
