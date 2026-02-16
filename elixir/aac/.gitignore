@@ -1,0 +1,19 @@
+# Elixir/Phoenix
+/_build/
+/deps/
+*.ez
+
+# Generated on crash
+erl_crash.dump
+
+# Database files
+/priv/repo/*.db
+/priv/repo/*.db-*
+
+# Secrets
+/config/*.secret.exs
+.env
+
+# OS
+.DS_Store
+Thumbs.db
